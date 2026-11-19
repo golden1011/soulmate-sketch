@@ -1,0 +1,1176 @@
+<!doctype html>
+<!--
+  ============================================================
+  NAYA VALE — SOULMATE SKETCH FUNNEL  •  Stripe + Netlify setup
+  Restyled 2026-11-18 to match the original Tina Aldea funnel's
+  look, layout and section order (landing → quiz → sales page),
+  with Naya Vale swapped in. Conversion structure preserved.
+  ============================================================
+  STRIPE PAYMENT LINKS — LIVE (wired in 2026-11-18):
+       • Basic Soulmate Sketch — $37
+         https://buy.stripe.com/fZu14m2Te3h62ea4fB4Ni0J
+       • Complete Soulmate Vision — $67
+         https://buy.stripe.com/9B6bJ0alGaJy4mi4fB4Ni0K
+  In Stripe, set each Payment Link's "After payment" redirect to:
+       https://YOUR-NETLIFY-SITE.netlify.app/?paid=basic#thankyou
+       https://YOUR-NETLIFY-SITE.netlify.app/?paid=complete#thankyou
+  EMBEDDED CHECKOUT (card form loads inside the checkout view):
+       netlify/functions/create-checkout.js creates the session. In Netlify →
+       Site settings → Environment variables, set STRIPE_SECRET_KEY and
+       STRIPE_PUBLISHABLE_KEY (optional: STRIPE_PRICE_BASIC / STRIPE_PRICE_COMPLETE).
+       Until those are set, checkout falls back to the Payment Links above.
+  Deploy: connect this repo (or drag the whole folder) into Netlify so the functions deploy.
+  No database. Quiz answers travel in in-page state + sessionStorage, and with the Stripe order as metadata.
+  ============================================================
+-->
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<link rel="icon" href="data:,">
+<title>Naya Vale — Seelenpartner-Zeichnung | Sieh das Gesicht des Menschen, der für dich bestimmt ist</title>
+<meta name="description" content="Naya Vale zeichnet deinen Seelenpartner anhand deiner Quiz-Antworten von Hand mit Bleistift und schickt dir die Zeichnung innerhalb von 48 Stunden per WhatsApp.">
+<link rel="canonical" href="https://nayavale.com/ger/">
+<link rel="alternate" hreflang="en" href="https://nayavale.com/">
+<link rel="alternate" hreflang="fr" href="https://nayavale.com/fr/">
+<link rel="alternate" hreflang="de" href="https://nayavale.com/ger/">
+<link rel="alternate" hreflang="x-default" href="https://nayavale.com/">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<script src="https://js.stripe.com/v3/" async></script>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;0,800;1,600&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --cream:#fdf8f0; --paper:#ffffff; --greybg:#f6f7f9; --navy:#16263f; --ink:#2c3646; --muted:#68727f;
+  --green:#4cb050; --green-dark:#3d9142; --green-bright:#57d977; --orange:#f97d16; --blue:#63a9e8;
+  --char:#2e2e2e; --line:#e7e0d2; --line2:#e3e7ec; --rose:#b83a5a; --wa:#25d366; --wa-dark:#128c4b;
+  --wa-head:#075e54; --wa-bg:#ece5dd; --gold-star:#f5b301;
+  --plum:#16263f; --surface:#ffffff; --surface2:#f6f7f9; --gold-bg:#fdf3d7;
+  --shadow:0 8px 24px rgba(22,38,63,.10); --radius:12px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:'Source Sans 3',system-ui,sans-serif;background:var(--cream);color:var(--ink);line-height:1.55;font-size:17px}
+h1,h2,h3,.serif{font-family:'Playfair Display',Georgia,serif;color:var(--navy);line-height:1.15}
+h1{font-size:clamp(1.9rem,5vw,2.6rem);font-weight:800;margin:.2em 0}
+h2{font-size:clamp(1.6rem,4vw,2.1rem);font-weight:700;margin:.2em 0 .4em}
+h3{font-size:1.25rem;margin:.2em 0 .3em}
+p{margin:.5em 0}
+img{max-width:100%;display:block}
+button,[role="button"],select,input,summary{min-height:44px}
+.wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+.narrow{max-width:680px;margin:0 auto;padding:0 20px}
+.view{display:none}.view.active{display:block}
+.center{text-align:center}
+.mt{margin-top:18px}.mb{margin-bottom:18px}
+.hint{color:var(--muted);font-size:.92rem}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:9px;padding:15px 30px;font-family:inherit;font-size:1.05rem;font-weight:700;cursor:pointer;text-decoration:none;text-align:center;min-height:52px}
+.btn small{display:block;width:100%;font-weight:600;font-size:.82rem;opacity:.92}
+.btn:has(small){flex-direction:column;gap:2px}
+.btn-green{background:var(--green);color:#fff;box-shadow:0 6px 18px rgba(76,176,80,.35)}
+.btn-green:hover{background:var(--green-dark)}
+.btn-orange{background:var(--orange);color:#fff;box-shadow:0 6px 18px rgba(249,125,22,.35)}
+.btn-orange:hover{background:#e56f0d}
+.btn-plum{background:var(--navy);color:#fff}
+.btn-ghost{background:transparent;color:var(--muted);box-shadow:none;font-weight:600}
+.btn-block{width:100%}
+section{padding:44px 0}
+.card{background:var(--paper);border:1px solid var(--line2);border-radius:var(--radius);padding:22px;box-shadow:var(--shadow)}
+.checklist{list-style:none;padding:0;margin:10px 0}
+.checklist li{padding:9px 0 9px 34px;position:relative;border-bottom:1px dashed var(--line2)}
+.checklist li:last-child{border-bottom:0}
+.checklist li::before{content:"✓";position:absolute;left:0;top:8px;width:24px;height:24px;border-radius:50%;background:#e6f7ec;color:var(--green-dark);display:grid;place-items:center;font-weight:800;font-size:.85rem}
+.checklist li.no::before{content:"✕";background:#fdecec;color:var(--rose)}
+.stars{color:var(--gold-star);font-size:1.25rem;letter-spacing:4px;line-height:1}
+/* --- Landing: blue banner + hero (original layout) --- */
+.bluebar{background:var(--blue);color:#fff;text-align:center;padding:9px 16px;font-size:.9rem;font-weight:600}
+.hero{padding:26px 0 40px;text-align:center}
+.collage{max-width:330px;margin:0 auto 22px;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 12px 32px rgba(22,38,63,.18)}
+.collage-top{display:grid;grid-template-columns:1fr 1fr}
+.collage-top figure{margin:0;position:relative}
+.collage-top img{aspect-ratio:1/1;object-fit:cover;width:100%}
+.collage-top figcaption{position:absolute;top:0;left:0;right:0;background:rgba(255,255,255,.92);font-size:.62rem;font-weight:700;color:var(--navy);padding:3px 4px;text-align:center}
+.collage-naya{position:relative}
+.collage-naya img{aspect-ratio:4/3;object-fit:cover;object-position:top;width:100%}
+.collage-logo{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(transparent,rgba(255,251,240,.97) 38%);padding:26px 8px 8px;text-align:center}
+.collage-logo .nm{font-family:'Playfair Display',serif;font-style:italic;font-weight:700;font-size:1.35rem;color:#7a5b23}
+.collage-logo .rl{font-size:.62rem;font-weight:700;letter-spacing:.22em;color:var(--navy)}
+.eyebrow{font-size:.74rem;font-weight:700;letter-spacing:.24em;text-transform:uppercase;color:#8a94a3;margin:14px 0 6px}
+.hero h1{max-width:560px;margin-left:auto;margin-right:auto}
+.hero .sub{color:#4c586a;max-width:480px;margin:10px auto 20px;font-size:1.05rem}
+.delivered{color:var(--muted);font-size:.9rem;margin-top:10px}
+.seenon{margin-top:30px;border-top:1px solid var(--line);padding-top:18px}
+.seenon .lbl{font-size:.68rem;font-weight:700;letter-spacing:.3em;color:#9aa4b1}
+.seenon .row{display:flex;justify-content:center;gap:30px;flex-wrap:wrap;margin-top:10px;color:#8a94a3;font-weight:700;font-size:1.02rem}
+/* --- Hero: split sketch / couple selfie (original-style clone header) --- */
+.hero-split-card{max-width:860px;margin:0 auto 22px;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 12px 32px rgba(22,38,63,.18)}
+.hero-split{display:grid;grid-template-columns:1fr 1fr}
+.hero-split figure{margin:0;display:flex;flex-direction:column}
+.hero-split figure+figure{border-left:1px solid var(--line)}
+.hero-split img{width:100%;aspect-ratio:4/5;object-fit:cover;flex:1}
+.hero-split .sketch-img{object-position:center top}
+.hero-split .couple-img{object-position:center 22%}
+.hero-split figcaption{font-size:1.12rem;font-weight:800;color:var(--navy);padding:14px 8px;text-align:center;background:#fff;line-height:1.25}
+@media(max-width:460px){.hero-split figcaption{font-size:.95rem;padding:11px 5px}}
+.naya-intro{text-align:center;margin-top:36px}
+.naya-intro img{width:min(175px,55vw);aspect-ratio:1/1;object-fit:cover;object-position:center 18%;border-radius:14px;margin:0 auto;box-shadow:var(--shadow);border:4px solid #fff;transform:rotate(-3deg)}
+.naya-intro .naya-name{font-weight:800;color:#4d321f;font-size:1.3rem;margin-top:12px;line-height:1.2}
+.naya-intro .naya-role{color:#4d321f;font-size:1rem;margin-top:2px}
+.hero-brand{background:linear-gradient(#fffbf0,#fffbf0);padding:10px 8px 12px;text-align:center}
+.hero-brand .nm{font-family:'Playfair Display',serif;font-style:italic;font-weight:700;font-size:1.4rem;color:#7a5b23}
+.hero-brand .rl{font-size:.62rem;font-weight:700;letter-spacing:.22em;color:var(--navy)}
+/* --- Social proof rows (original-style counts & rating) --- */
+.proof-row{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:6px;font-size:1rem}
+.proof-row .stars{font-size:1.15rem}
+.proof-row strong{color:var(--navy)}
+.section-proof{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin:4px auto 2px;font-size:.98rem}
+.section-proof .stars{font-size:1.05rem}
+.section-proof strong{color:var(--navy)}
+/* --- How It Works: dark charcoal band --- */
+.darkband{background:var(--char);color:#fff;padding:46px 0}
+.darkband h2{color:#fff;text-align:center}
+.darksteps{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;max-width:860px;margin:26px auto 0;text-align:center}
+@media(max-width:760px){.darksteps{grid-template-columns:1fr;max-width:420px}}
+.gnum{width:46px;height:46px;border-radius:50%;background:var(--green);color:#fff;display:grid;place-items:center;font-weight:700;font-size:1.15rem;margin:0 auto 10px}
+.darksteps h3{color:#fff;font-family:'Source Sans 3',sans-serif;font-size:1.08rem}
+.darksteps p{color:#c9c9c9;font-size:.92rem;margin:4px 0}
+/* --- WhatsApp sample chats --- */
+.wa-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:760px;margin:24px auto 0}
+@media(max-width:700px){.wa-grid{grid-template-columns:1fr}}
+.wa-chat{background:var(--wa-bg);border-radius:10px;overflow:hidden;box-shadow:var(--shadow);text-align:left}
+.wa-chat .hd{background:var(--wa-head);color:#fff;padding:9px 14px;font-weight:700;font-size:.9rem;display:flex;justify-content:space-between;align-items:center}
+.sample-tag{background:#ffd54d;color:#5d4300;font-size:.62rem;font-weight:800;letter-spacing:.08em;padding:2px 8px;border-radius:99px}
+.wa-chat .bd{padding:12px}
+.bub{background:#fff;border-radius:8px;padding:8px 10px;margin:8px 0;font-size:.88rem;max-width:88%;box-shadow:0 1px 1px rgba(0,0,0,.08)}
+.bub.me{background:#dcf8c6;margin-left:auto}
+.bub img{border-radius:6px;margin-top:6px}
+.bub .tm{display:block;text-align:right;font-size:.66rem;color:#8a8a8a;margin-top:2px}
+/* --- Who Is This For --- */
+.for-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;max-width:820px;margin:24px auto 0}
+@media(max-width:760px){.for-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:460px){.for-grid{grid-template-columns:1fr}}
+.for-card{background:#fef7ec;border-radius:12px;padding:22px 14px;text-align:center}
+.for-card svg{width:30px;height:30px;margin:0 auto 8px}
+.for-card p{font-weight:700;color:var(--navy);margin:0;font-size:.98rem}
+/* --- What You Get rows --- */
+.get-list{max-width:620px;margin:22px auto 0;display:grid;gap:12px}
+.get-row{background:#fff;border-radius:10px;padding:16px 18px;display:flex;gap:14px;align-items:flex-start;box-shadow:0 2px 8px rgba(22,38,63,.05);text-align:left}
+.get-ic{flex:none;width:38px;height:38px;border-radius:9px;background:#e8f6e9;display:grid;place-items:center}
+.get-ic svg{width:20px;height:20px}
+.get-row strong{color:var(--navy)}
+.get-row p{margin:2px 0 0;color:var(--muted);font-size:.92rem}
+/* --- Recent work --- */
+.gallery{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;max-width:620px;margin:22px auto 0}
+@media(max-width:520px){.gallery{grid-template-columns:1fr 1fr}}
+.gallery figure{margin:0;border-radius:10px;overflow:hidden;box-shadow:var(--shadow)}
+.gallery img{aspect-ratio:4/5;object-fit:cover;width:100%}
+.pair{max-width:620px;margin:22px auto 0;background:var(--paper);border:1px solid var(--line2);border-radius:12px;padding:16px;box-shadow:var(--shadow)}
+.pair-title{text-align:center;font-weight:700;color:var(--navy);margin:0 0 12px}
+.pair-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.pair-grid figure{margin:0;border-radius:10px;overflow:hidden;border:1px solid var(--line2)}
+.pair-grid img{aspect-ratio:1/1;object-fit:cover;width:100%}
+.pair-grid figcaption{padding:9px;font-size:.9rem;font-weight:700;text-align:center;color:var(--navy)}
+/* --- FAQ (original style) --- */
+details{background:#fff;border:1px solid var(--line2);border-radius:10px;padding:4px 18px;margin:10px auto;max-width:620px;text-align:left}
+summary{cursor:pointer;font-weight:700;color:var(--navy);display:flex;align-items:center;padding:10px 0;font-family:'Playfair Display',serif;font-size:1.02rem}
+details p{color:#4c586a}
+/* --- Footer (original light grey) --- */
+footer{background:#f1f3f5;color:#5c6774;padding:36px 0 30px;font-size:.88rem;text-align:center}
+footer .flogo{font-family:'Playfair Display',serif;font-style:italic;font-weight:700;font-size:1.5rem;color:#7a5b23}
+footer .flinks{margin:12px 0}
+footer .flinks a{color:#5c6774;text-decoration:none;margin:0 8px}
+footer .flinks a:hover{text-decoration:underline}
+footer .fine{max-width:760px;margin:10px auto 0;font-size:.76rem;color:#8a94a3;text-align:left}
+/* --- Quiz (unchanged from original funnel) --- */
+.quiz-shell{max-width:640px;margin:0 auto;padding:28px 20px 60px}
+.progress{display:flex;gap:6px;margin:18px 0 26px}
+.progress span{flex:1;height:8px;border-radius:99px;background:#e3e7ec}
+.progress span.on{background:var(--green-bright)}
+.quiz-head{background:#333;color:#fff;text-align:center;padding:22px 16px}
+.quiz-head p{margin:2px 0;opacity:.85}
+.quiz-head strong{font-size:1.15rem}
+.quiz-head h2,.quiz-shell h2{color:var(--navy)}
+.opt{display:block;width:100%;text-align:left;background:#fff;border:2px solid var(--line2);border-radius:12px;padding:16px 18px;font:inherit;font-size:1.05rem;cursor:pointer;margin:10px 0;color:var(--ink)}
+.opt:hover,.opt.sel{border-color:var(--green);background:#f2fbf4}
+.field{width:100%;padding:14px 16px;border:2px solid var(--line2);border-radius:12px;font:inherit;background:#fff;color:var(--ink);margin:6px 0 14px}
+label{font-weight:600;font-size:.95rem}
+.error{background:#fdecec;border:1px solid #f3b3b3;color:#7a1226;border-radius:10px;padding:10px 14px;display:none;margin:10px 0}
+.consent{display:flex;gap:12px;align-items:flex-start;background:#fff;border:1px solid var(--line2);border-radius:12px;padding:16px;margin:14px 0}
+.consent input{width:24px;height:24px;min-height:24px;flex:none;margin-top:2px;accent-color:var(--green)}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:760px){.grid2{grid-template-columns:1fr}}
+/* --- Offer / sales page (original post-quiz layout) --- */
+.orange{color:var(--orange)}
+.tcard{position:relative;background:#1d2c4e;border-radius:14px;overflow:hidden;box-shadow:0 12px 30px rgba(22,38,63,.25);color:#fff;text-align:left;margin:20px 0 8px}
+.tcard .in{display:grid;grid-template-columns:.9fr 1.1fr;gap:0}
+@media(max-width:560px){.tcard .in{grid-template-columns:1fr}}
+.tcard img{width:100%;height:100%;object-fit:cover;aspect-ratio:1/1}
+.tcard .tx{padding:22px}
+.tcard .tx .big{font-family:'Playfair Display',serif;font-weight:800;font-size:1.3rem;line-height:1.25}
+.tcard .tx p{color:#dbe4f2;font-size:.95rem}
+.trustrow{display:flex;justify-content:center;gap:18px;flex-wrap:wrap;color:var(--muted);font-size:.86rem;margin:12px 0 16px}
+.value-list{max-width:620px;margin:20px auto 0;display:grid;gap:10px;text-align:left}
+.value-row{background:#fff;border-radius:10px;padding:14px 16px;display:flex;gap:12px;align-items:flex-start;box-shadow:0 2px 8px rgba(22,38,63,.05)}
+.value-row .pr{margin-left:auto;color:#9aa4b1;font-weight:700;white-space:nowrap}
+.value-row strong{color:var(--navy);font-size:.98rem}
+.value-row p{margin:2px 0 0;color:var(--muted);font-size:.88rem}
+.total-box{max-width:620px;margin:16px auto 0;background:#fff;border:1.5px solid #bfe6c2;border-radius:10px;padding:18px;text-align:center}
+.pairs{display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:820px;margin:22px auto 0}
+@media(max-width:700px){.pairs{grid-template-columns:1fr}}
+.paircard{display:flex;background:#fff;border-radius:10px;overflow:hidden;box-shadow:var(--shadow)}
+.paircard img{width:50%;aspect-ratio:1/1;object-fit:cover}
+.paircard .photo{width:50%;display:grid;place-items:center;border-left:2px dashed var(--line2);color:var(--muted);font-size:.85rem;text-align:center;padding:12px;background:#fbfaf7}
+.paircard .arr{align-self:center;margin-left:-11px;z-index:2;background:var(--orange);color:#fff;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:.8rem;flex:none}
+.vids{display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:820px;margin:22px auto 0}
+@media(max-width:700px){.vids{grid-template-columns:1fr}}
+.vid{position:relative;border-radius:10px;overflow:hidden;box-shadow:var(--shadow)}
+.vid img{width:100%;aspect-ratio:16/10;object-fit:cover;filter:brightness(.75)}
+.vid .play{position:absolute;inset:0;display:grid;place-items:center}
+.vid .play span{width:62px;height:62px;border-radius:50%;background:#e62117;color:#fff;display:grid;place-items:center;font-size:1.4rem;padding-left:4px}
+.vid figcaption{position:absolute;left:0;right:0;bottom:0;color:#fff;font-size:.8rem;padding:8px 12px;background:linear-gradient(transparent,rgba(0,0,0,.65))}
+.story{max-width:620px;margin:14px auto 0;background:#fff;border-radius:12px;box-shadow:var(--shadow);padding:22px;text-align:left}
+.story .q{font-family:'Playfair Display',serif;font-style:italic;font-weight:700;color:var(--navy);font-size:1.12rem;text-align:center}
+.story .who{display:flex;gap:12px;align-items:center;margin-top:12px}
+.avatar{width:46px;height:46px;border-radius:50%;background:#e8f6e9;color:var(--green-dark);display:grid;place-items:center;font-weight:800;flex:none}
+.fb-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:820px;margin:22px auto 0;text-align:left}
+@media(max-width:700px){.fb-grid{grid-template-columns:1fr}}
+.fb{background:#fff;border-radius:10px;box-shadow:var(--shadow);padding:14px}
+.fb .hd{display:flex;gap:10px;align-items:center}
+.fb .hd .avatar{width:38px;height:38px;background:#e7eefb;color:#365899}
+.fb img{border-radius:8px;margin:10px 0;width:100%;aspect-ratio:16/10;object-fit:cover}
+.fb .acts{display:flex;justify-content:space-around;border-top:1px solid var(--line2);padding-top:8px;color:#606770;font-size:.85rem;font-weight:600}
+.price-cards{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:stretch;max-width:820px;margin:22px auto 0;text-align:left}
+@media(max-width:760px){.price-cards{grid-template-columns:1fr}}
+.price-card{position:relative}
+.price-card.featured{border:2.5px solid var(--green)}
+.ribbon{position:absolute;top:-14px;right:16px;background:var(--green);color:#fff;font-weight:700;font-size:.82rem;padding:5px 12px;border-radius:999px}
+.price{font-family:'Playfair Display',serif;font-size:3rem;font-weight:800;color:var(--navy)}
+.strike{color:var(--muted);text-decoration:line-through}
+.summary-box{background:var(--greybg);border-radius:12px;padding:18px}
+.summary-box dl{display:grid;grid-template-columns:auto 1fr;gap:6px 18px;margin:0}
+.summary-box dt{font-weight:700}.summary-box dd{margin:0}
+.value-table{width:100%;border-collapse:collapse}
+.value-table td{padding:10px 6px;border-bottom:1px dashed var(--line2)}
+.value-table td:last-child{text-align:right;font-weight:700;white-space:nowrap}
+.stripe-note{font-size:.88rem;color:var(--muted);text-align:center}
+.badge-row{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0;justify-content:center}
+.badge{background:#fff;border:1px solid var(--line2);border-radius:999px;padding:7px 13px;font-size:.88rem;font-weight:600}
+.modal-overlay{position:fixed;inset:0;background:rgba(20,8,18,.72);display:none;place-items:center;z-index:50;padding:18px}
+.modal-overlay.show{display:grid}
+.modal{background:#fff;max-width:520px;width:100%;border-radius:18px;padding:28px;max-height:90vh;overflow:auto;position:relative}
+.modal h2{color:#c81e1e;font-family:'Source Sans 3',sans-serif;font-size:1.7rem}
+.close-x{position:absolute;top:10px;right:10px;width:44px;height:44px;border-radius:50%;border:1px solid var(--line2);background:#fff;font-size:1.2rem;cursor:pointer}
+/* --- Mobile hero order: headline → sketch/couple card → Start Sketch CTA → artist photo (desktop unchanged) --- */
+.hero-mobile-cta{display:none;text-align:center;padding:0 20px}
+@media(max-width:760px){
+  .hero-mobile-cta{display:block;margin:4px auto 0}
+  .hero-desktop-cta{display:none}
+}
+
+/* --- Subtle attention wiggle (orange "YES! I WANT MY SKETCH" CTA): a few small tilts, then a rest, on repeat --- */
+@keyframes cta-wiggle{
+  0%,58%,100%{transform:rotate(0)}
+  62%{transform:rotate(-2.5deg)} 66%{transform:rotate(2.5deg)}
+  70%{transform:rotate(-2deg)} 74%{transform:rotate(2deg)}
+  78%{transform:rotate(-1deg)} 82%{transform:rotate(0)}
+}
+.btn-wiggle{animation:cta-wiggle 3.2s ease-in-out 1s infinite;transform-origin:center}
+.btn-wiggle:hover{animation-play-state:paused}
+@media(prefers-reduced-motion:reduce){.btn-wiggle{animation:none}}
+/* --- WhatsApp number: country code + formatted number --- */
+.phone-row{display:flex;gap:8px;margin:6px 0 14px}
+.phone-row .field{margin:0}
+.phone-row select.field{flex:0 0 auto;width:auto;max-width:42%;padding-right:8px}
+.phone-row input.field{flex:1;min-width:0}
+/* --- Checkout: bonuses included + embedded Stripe form --- */
+.co-bonus{margin-top:18px;border:1.5px dashed #bfe6c2;background:#f2fbf4;border-radius:12px;padding:14px 16px}
+.co-bonus h4{margin:0 0 6px;font-size:1rem;color:var(--green-dark)}
+.co-bonus ul{list-style:none;padding:0;margin:0}
+.co-bonus li{display:flex;gap:10px;align-items:baseline;padding:7px 0;border-bottom:1px dashed #cfe9d1;font-size:.95rem}
+.co-bonus li:last-child{border-bottom:0}
+.co-bonus li .v{margin-left:auto;white-space:nowrap;font-weight:700;color:var(--green-dark)}
+.co-bonus li .v s{color:var(--muted);font-weight:600;margin-right:6px}
+.co-bonus.locked{border-color:var(--line2);background:var(--greybg)}
+.co-bonus.locked h4{color:var(--navy)}
+.co-bonus.locked li .v{color:var(--muted)}
+#stripe-embed{margin-top:14px;min-height:0;transition:min-height .3s}
+#stripe-embed.loading{min-height:340px}
+.stripe-loader{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;min-height:320px;color:var(--muted);font-size:.95rem}
+.stripe-loader .spin{width:34px;height:34px;border-radius:50%;border:3px solid var(--line2);border-top-color:var(--green);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.stripe-fade{animation:fadein .35s ease-out}
+@keyframes fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+/* --- Checkout: payment first (above the fold) --- */
+.co-wrap{max-width:760px;padding-top:26px;padding-bottom:60px}
+.co-title{font-size:2.3rem}
+.co-card{margin-top:16px}
+.co-mini{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--greybg);border-radius:10px;padding:12px 14px;margin-bottom:14px}
+.co-mini strong{color:var(--navy)}
+.co-mini-sub{font-size:.86rem;color:var(--green-dark);font-weight:600}
+.co-mini-total{font-family:'Playfair Display',serif;font-weight:800;font-size:1.6rem;color:var(--navy)}
+.co-cards{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:10px}
+.co-cards .badge{font-size:.78rem;padding:4px 10px}
+@media(max-width:760px){
+  .co-wrap{padding-top:16px}
+  .co-title{font-size:1.6rem;margin:0}
+  .co-sub{font-size:.95rem;margin:4px 0 0}
+  .co-card{margin-top:12px;padding:14px}
+  /* quiz: compact header + options so every step's button sits above the fold */
+  .quiz-head{padding:12px 14px}
+  .quiz-head p{font-size:.85rem}
+  .quiz-head strong{font-size:1rem}
+  .quiz-shell{padding-top:6px}
+  .quiz-shell h2{font-size:1.4rem}
+  .progress{margin:10px 0 14px}
+  .opt{padding:12px 16px;margin:7px 0}
+  .consent{padding:10px 12px;margin:8px 0 12px;font-size:.8rem;line-height:1.4}
+  .qstep .hint{font-size:.85rem;margin:2px 0 8px}
+}
+@media(max-width:360px),(max-height:600px){
+  .quiz-head p{display:none}
+  .quiz-shell h2{font-size:1.2rem}
+  .qstep[data-step="5"] .hint{display:none}
+  .consent{font-size:.74rem}
+}
+</style>
+<!-- ============================================================
+  META PIXEL + CONVERSIONS API (CAPI)
+  Pixel ID: 2396469624443898
+  Browser events: PageView + ViewContent (landing), Lead (quiz
+  completed), InitiateCheckout (checkout reached / Pay Now),
+  Purchase (thank-you after a paid order) — fired from the page
+  script below via window.trackMetaEvent.
+  CAPI: the helper below mirrors every event to the server
+  endpoint /.netlify/functions/meta-capi with the same event_id
+  (deduplication) and SHA-256 hashed email / WhatsApp.
+  NO access token exists in this file or any client-side file —
+  the token is held server-side only, as an environment variable
+  read by the Netlify function.
+  ============================================================ -->
+<script>
+!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
+fbq('init','2396469624443898');
+window.__metaUser={email:'',phone:''};
+function metaNewEventId(){
+  if(window.crypto&&crypto.randomUUID){ try{ return crypto.randomUUID(); }catch(e){} }
+  return 'evt-'+Date.now()+'-'+Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2);
+}
+function metaCookie(name){
+  var parts=('; '+document.cookie).split('; '+name+'=');
+  if(parts.length===2){ return decodeURIComponent(parts.pop().split(';').shift()); }
+  return '';
+}
+function metaSha256(value){
+  if(!value||!window.crypto||!crypto.subtle||!window.TextEncoder) return Promise.resolve('');
+  return crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)).then(function(buf){
+    return Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
+  }).catch(function(){ return ''; });
+}
+function metaSendCAPI(eventName, eventId, customData){
+  try{
+    var email=(window.__metaUser.email||'').trim().toLowerCase();
+    var phone=(window.__metaUser.phone||'').replace(/\D/g,'');
+    return Promise.all([metaSha256(email), metaSha256(phone)]).then(function(hashes){
+      var userData={};
+      if(hashes[0]) userData.em=[hashes[0]];
+      if(hashes[1]) userData.ph=[hashes[1]];
+      var fbp=metaCookie('_fbp'); if(fbp) userData.fbp=fbp;
+      var fbc=metaCookie('_fbc'); if(fbc) userData.fbc=fbc;
+      var payload={
+        event_name:eventName,
+        event_id:eventId,
+        event_time:Math.floor(Date.now()/1000),
+        event_source_url:window.location.href,
+        action_source:'website',
+        user_data:userData,
+        custom_data:customData||{}
+      };
+      return fetch('/.netlify/functions/meta-capi',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(payload),
+        keepalive:true
+      }).catch(function(){ /* Server endpoint lives on the Netlify deployment — never let a tracking failure break the funnel. */ });
+    });
+  }catch(e){ return Promise.resolve(); }
+}
+window.trackMetaEvent=function(eventName, customData){
+  var eventId=metaNewEventId();
+  if(window.fbq){ try{ fbq('track', eventName, customData||{}, {eventID:eventId}); }catch(e){} }
+  metaSendCAPI(eventName, eventId, customData||{});
+  return eventId;
+};
+window.MetaCAPI={
+  track:window.trackMetaEvent,
+  send:metaSendCAPI,
+  setUser:function(email, phone){
+    if(email!=null) window.__metaUser.email=String(email);
+    if(phone!=null) window.__metaUser.phone=String(phone);
+  }
+};
+/* PageView — fired once on load; Pixel and CAPI share one event_id for deduplication */
+window.trackMetaEvent('PageView');
+</script>
+<noscript><img height="1" width="1" style="display:none" alt="" src="https://www.facebook.com/tr?id=2396469624443898&ev=PageView&noscript=1"></noscript>
+<!-- End Meta Pixel Code -->
+</head>
+<body>
+
+<!-- ============ VIEW: LANDING (original Tina layout, Naya Vale) ============ -->
+<div class="view active" id="view-landing">
+  <div class="bluebar">Dies ist meine offizielle Website! Vorsicht vor Nachahmern</div>
+
+  <div class="hero">
+    <div class="narrow" style="padding-left:20px;padding-right:20px">
+      <div class="eyebrow">Die Nr. 1 unter den medialen Seelenpartner-Zeichnerinnen</div>
+      <h1>&bdquo;Zwei Wochen nachdem ich meine Zeichnung von Naya Vale bekommen hatte, traf ich meinen Seelenpartner&ldquo;</h1>
+    </div>
+    <div class="wrap">
+      <div class="hero-split-card">
+        <div class="hero-split">
+          <figure>
+            <figcaption>Das ist meine Seelenpartner-Zeichnung</figcaption>
+            <img class="sketch-img" src="/assets/img/c5c0c80531da.webp" alt="Buntstiftzeichnung von Naya Vale: ein lächelnder Mann mit kurzen braunen Haaren und leichtem Bartschatten in einem dunkelblauen T-Shirt, oben links Naya Vales große Signatur">
+          </figure>
+          <figure>
+            <figcaption>Und das ist der Mann, den sie geheiratet hat</figcaption>
+            <img class="couple-img" src="/assets/img/d9a419598e54.webp" alt="Eine lächelnde Frau macht draußen ein Selfie mit ihrem Mann – demselben Mann wie auf der Zeichnung, im braun karierten Hemd">
+          </figure>
+        </div>
+      </div>
+    </div>
+    <!-- Mobile only (CSS-hidden on desktop): Start Sketch CTA sits below the sketch/couple card, directly above Naya's photo -->
+    <div class="hero-mobile-cta"><button class="btn btn-green" data-goto-quiz>✦ Meine Seelenpartner-Zeichnung starten</button></div>
+    <div class="naya-intro" style="margin-top:26px">
+      <img src="/assets/img/1e29cddeaa49.webp" alt="Naya Vale, mediale Künstlerin – eine schlanke Frau Anfang 40 mit kurzem violettem Pixie-Cut, verschränkten Armen, schwarzem ärmellosem Top und einem Federtattoo am linken Unterarm">
+      <div class="naya-name">Naya Vale</div>
+      <div class="naya-role">Mediale Künstlerin &amp; Expertin</div>
+    </div>
+    <div class="narrow" style="padding-left:20px;padding-right:20px">
+    <p class="sub">Ich zeichne deinen vorbestimmten Seelenpartner in 48 Stunden und verrate dir, wann und wo ihr euch begegnen werdet</p>
+    <button class="btn btn-green hero-desktop-cta" data-goto-quiz>✦ Meine Seelenpartner-Zeichnung starten</button>
+    <p class="delivered">Mit Liebe &amp; Intuition geliefert – in 48 Stunden</p>
+    <!-- SOCIAL PROOF NUMBERS: "43,287+ Happy Clients" and "4.9/5" below (and repeated in the testimonial / social-proof sections) are the original funnel's sample numbers, shown as a close clone at the owner's request — replace with verified Naya Vale numbers before launch. -->
+    <div class="proof-row"><span class="stars" aria-hidden="true">★★★★★</span><span><strong>4,9/5</strong> von <strong>über 43.287 glücklichen Kunden</strong></span></div>
+    <p class="hint">Von Hand für dich gezeichnet – eine Zeichnung nach der anderen</p>
+    <div class="seenon">
+      <div class="lbl">BEKANNT AUS</div>
+      <div class="row"><span>TikTok</span><span>Instagram</span><span>Facebook</span><span>YouTube</span></div>
+    </div>
+    </div>
+  </div>
+
+  <div class="darkband">
+    <div class="wrap">
+      <h2>So funktioniert’s</h2>
+      <div class="darksteps">
+        <div><div class="gnum">1</div><h3>Mach das Quiz</h3><p>Beantworte ein paar einfache Fragen, damit ich mich auf deine Energie einstimmen kann</p></div>
+        <div><div class="gnum">2</div><h3>Ich empfange deinen Seelenpartner</h3><p>Mit meinen medialen Fähigkeiten sehe ich deinen Seelenpartner vor mir und zeichne ihn</p></div>
+        <div><div class="gnum">3</div><h3>Direkt auf dein WhatsApp</h3><p>Erhalte deine Seelenpartner-Zeichnung und eine ausführliche Deutung innerhalb von 48 Stunden</p></div>
+      </div>
+    </div>
+  </div>
+
+  <section><div class="wrap center">
+    <h2>Das sagen meine Kunden</h2>
+    <!-- Social-proof numbers here are the original funnel's sample numbers (see hero note) — replace with verified Naya Vale numbers before launch. -->
+    <div class="section-proof"><span class="stars" aria-hidden="true">★★★★★</span><span><strong>4,9/5</strong> · <strong>über 43.287 glückliche Kunden</strong></span></div>
+    <p class="hint">Echte Kunden-Chats, mit Erlaubnis geteilt – so siehst du genau, wie deine Zeichnung auf WhatsApp ankommt.</p>
+    <div class="wa-grid">
+      <div class="wa-chat"><div class="hd"><span>WhatsApp-Chat</span></div><div class="bd">
+        <div class="bub">Hallo Naya, ich muss dir etwas gestehen …<span class="tm">15:47</span></div>
+        <div class="bub me">Ich höre. Was liegt dir auf dem Herzen?<span class="tm">15:53</span></div>
+        <div class="bub">Als ich deine Zeichnung zum ersten Mal sah, war ich etwas skeptisch. Aber letztes Wochenende … habe ich sie getroffen. Sie sieht genauso aus wie die Frau auf deiner Zeichnung. Das ist unheimlich.<img src="/assets/img/68588b30ae11.webp" alt="Bleistiftzeichnung einer Frau mit langen, welligen Haaren in einem WhatsApp-Chat"><span class="tm">15:54</span></div>
+        <div class="bub me">Was für wunderbare Neuigkeiten! Es ist erstaunlich, wie sich die Dinge fügen. Bleib offen für das Unerwartete. 💛<span class="tm">15:55</span></div>
+      </div></div>
+      <div class="wa-chat"><div class="hd"><span>WhatsApp-Chat</span></div><div class="bd">
+        <div class="bub">Rate mal, Naya! ❤️<span class="tm">11:11</span></div>
+        <div class="bub me">Was gibt’s Schönes?<span class="tm">11:20</span></div>
+        <div class="bub">Deine Zeichnung! Ich habe auf der Party einer Freundin einen Mann kennengelernt – er sieht haargenau so aus!<img src="/assets/img/c49ed4cff395.webp" alt="Bleistiftzeichnung eines Mannes mit kurzen dunklen Haaren in einem WhatsApp-Chat"><span class="tm">11:21</span></div>
+        <div class="bub me">Das ist fantastisch! Ich freue mich so für dich. Wie ein Traum, der wahr wird! ✨<span class="tm">11:25</span></div>
+      </div></div>
+      <div class="wa-chat"><div class="hd"><span>WhatsApp-Chat</span></div><div class="bd">
+        <div class="bub">Hallo Naya! Du glaubst nicht, was passiert ist! 😊<span class="tm">11:20</span></div>
+        <div class="bub me">Erzähl! Für aufregende Neuigkeiten bin ich immer da! 😍<span class="tm">11:26</span></div>
+        <div class="bub">Letzte Woche kam deine Zeichnung, und heute habe ich jemanden getroffen, der genauso aussieht wie er!<img src="/assets/img/035e0dfc8ed2.webp" alt="Bleistiftzeichnung eines Mannes mit lockigen Haaren und Bart in einem WhatsApp-Chat"><span class="tm">11:31</span></div>
+        <div class="bub me">Das ist unglaublich. Ich wünsche euch beiden viel Liebe und Gesundheit! 💚<span class="tm">11:32</span></div>
+      </div></div>
+      <div class="wa-chat"><div class="hd"><span>WhatsApp-Chat</span></div><div class="bd">
+        <div class="bub">Naya, ich musste dir sofort schreiben, als ich ihn gesehen habe! 😍<span class="tm">22:15</span></div>
+        <div class="bub">Der Mann aus deiner Zeichnung … ich bin jemandem begegnet, genau wie du es mir gesagt hast! Es fühlte sich an wie Schicksal! ❤️❤️❤️<img src="/assets/img/ad9f34111b29.webp" alt="Bleistiftzeichnung einer Frau mit lockigen Haaren in einem WhatsApp-Chat"><span class="tm">22:16</span></div>
+        <div class="bub me">Erzähl mir mehr!<span class="tm">22:16</span></div>
+        <div class="bub me">Wie wundervoll! Das klingt nach einer magischen Begegnung! 💫<span class="tm">22:17</span></div>
+      </div></div>
+    </div>
+    <div class="mt"><button class="btn btn-green" data-goto-quiz>✦ Meine Seelenpartner-Zeichnung starten</button></div>
+  </div></section>
+
+  <section style="padding-top:6px"><div class="wrap center">
+    <h2>Für wen ist das?</h2>
+    <p class="hint">Eine Seelenpartner-Zeichnung ist das perfekte Geschenk – für dich selbst oder einen geliebten Menschen</p>
+    <div class="for-grid">
+      <div class="for-card"><svg viewBox="0 0 24 24" fill="none" stroke="#e75480" stroke-width="2"><path d="M12 21s-7.5-4.9-9.7-9.2C.7 8.6 2.6 5 6.1 5c2 0 3.4 1.1 4.2 2.3h3.4C14.5 6.1 15.9 5 17.9 5c3.5 0 5.4 3.6 3.8 6.8C19.5 16.1 12 21 12 21z" transform="scale(.92) translate(1,0)"/></svg><p>Auf der Suche nach Liebe</p></div>
+      <div class="for-card"><svg viewBox="0 0 24 24" fill="none" stroke="#7c6bd6" stroke-width="2"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="3"/></svg><p>Neugierig auf die Zukunft</p></div>
+      <div class="for-card"><svg viewBox="0 0 24 24" fill="none" stroke="#e9a13b" stroke-width="2"><path d="M12 3l1.9 4.6L18.5 9l-4.6 1.4L12 15l-1.9-4.6L5.5 9l4.6-1.4L12 3zM19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z"/></svg><p>Bereit, abzuschließen</p></div>
+      <div class="for-card"><svg viewBox="0 0 24 24" fill="none" stroke="#2bb3a3" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg><p>Spirituelle Führung</p></div>
+      <div class="for-card"><svg viewBox="0 0 24 24" fill="none" stroke="#e75480" stroke-width="2"><rect x="4" y="10" width="16" height="10"/><path d="M12 10v10M4 14h16M12 10c-4 0-4.5-4.5-2-4.5S12 10 12 10zm0 0c4 0 4.5-4.5 2-4.5S12 10 12 10z"/></svg><p>Ein besonderes Geschenk</p></div>
+      <div class="for-card"><svg viewBox="0 0 24 24" fill="none" stroke="#4a90d9" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><p>Selbstfindung</p></div>
+    </div>
+  </div></section>
+
+  <section style="background:var(--greybg)"><div class="wrap center">
+    <h2>Das bekommst du</h2>
+    <p class="hint">Dein komplettes Seelenpartner-Erlebnis, direkt auf dein WhatsApp</p>
+    <div class="get-list">
+      <div class="get-row"><div class="get-ic"><svg viewBox="0 0 24 24" fill="none" stroke="#3d9142" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M3 18l5-4 4 3 3-2 6 5"/></svg></div><div><strong>Mediale Seelenpartner-Zeichnung</strong><p>Ein detailliertes Porträt deines Seelenpartners, empfangen durch mediale Wahrnehmung</p></div></div>
+      <div class="get-row"><div class="get-ic"><svg viewBox="0 0 24 24" fill="none" stroke="#3d9142" stroke-width="2"><path d="M6 3h9l4 4v14H6z"/><path d="M9 9h7M9 13h7M9 17h4"/></svg></div><div><strong>Ausführliche mediale Deutung</strong><p>Eine tiefgehende Beschreibung von Persönlichkeit und Wesenszügen deines Seelenpartners – und davon, wie ihr euch begegnen werdet</p></div></div>
+      <div class="get-row"><div class="get-ic"><svg viewBox="0 0 24 24" fill="none" stroke="#3d9142" stroke-width="2"><rect x="4" y="10" width="16" height="10"/><path d="M12 10v10M4 14h16"/></svg></div><div><strong>Bonus: Seelenpartner-Kompatibilitätsguide</strong><p>Entdecke die energetische Verbindung zwischen dir und deinem Seelenpartner</p></div></div>
+      <div class="get-row"><div class="get-ic"><svg viewBox="0 0 24 24" fill="none" stroke="#3d9142" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><div><strong>Lieferung in 48 Stunden</strong><p>Du erhältst alles innerhalb von 48 Stunden auf WhatsApp (Express-Option in 6 Std. verfügbar)</p></div></div>
+    </div>
+    <div class="mt"><button class="btn btn-green" data-goto-quiz>✦ Meine Seelenpartner-Zeichnung starten</button>
+    <p class="hint">Risikofreier Kauf – 30 Tage Geld-zurück-Garantie</p></div>
+  </div></section>
+
+  <section><div class="wrap center">
+    <h2>Meine neuesten Arbeiten</h2>
+    <p class="hint">Hier siehst du einige Beispiele meiner aktuellen Arbeiten</p>
+    <div class="pair">
+      <p class="pair-title">Zeichnung für Andrew – geboren am 1. März 1986</p>
+      <div class="pair-grid">
+        <figure><img src="/assets/img/c03ac80e75aa.webp" alt="Schwarz-weiße Bleistiftzeichnung für Andrew: eine Frau mit schulterlangen Haaren und sanftem Lächeln, signiert von Naya Vale"><figcaption>Basic – schwarz-weiß</figcaption></figure>
+        <figure><img src="/assets/img/b11c3c704a91.webp" alt="Buntstiftzeichnung für Andrew: dieselbe Frau mit schulterlangen braunen Haaren und sanftem Lächeln, signiert von Naya Vale"><figcaption>Komplett – in Farbe</figcaption></figure>
+      </div>
+    </div>
+    <div class="gallery">
+      <figure><img src="/assets/img/c49ed4cff395.webp" alt="Handgezeichnetes Bleistiftporträt eines Mannes mit kurzen dunklen Haaren und leichtem Bartschatten"></figure>
+      <figure><img src="/assets/img/68588b30ae11.webp" alt="Handgezeichnetes Bleistiftporträt einer Frau mit langen, welligen Haaren"></figure>
+      <figure><img src="/assets/img/035e0dfc8ed2.webp" alt="Handgezeichnetes Bleistiftporträt eines Mannes mit lockigen Haaren und Bart"></figure>
+      <figure><img src="/assets/img/ad9f34111b29.webp" alt="Handgezeichnetes Bleistiftporträt einer Frau mit lockigen Haaren"></figure>
+    </div>
+    <div class="mt"><button class="btn btn-green" data-goto-quiz>JA, ICH WILL MEINE SEELENPARTNER-ZEICHNUNG &gt;<br><small>Ohne Risiko – 30 Tage Geld-zurück-Garantie</small></button></div>
+  </div></section>
+
+  <section style="background:#faf9f6"><div class="wrap">
+    <h2 class="center">Häufige Fragen</h2>
+    <details><summary>Wie funktioniert die Seelenpartner-Zeichnung?</summary><p>Du beantwortest 5 kurze Quizfragen: zu wem du dich hingezogen fühlst, dein Geburtsdatum, deine Herkunft, deinen Vornamen und deine WhatsApp-Nummer. Naya stimmt sich auf deine Energie ein, empfängt das Gesicht deines Seelenpartners und zeichnet es von Hand mit Bleistift. Die fertige Zeichnung bekommst du per WhatsApp, zusätzlich als Kopie per E-Mail.</p></details>
+    <details><summary>Was kostet es?</summary><p>Die Basic-Zeichnung kostet 37&nbsp;$: eine Bleistiftzeichnung in Schwarz-Weiß, geliefert innerhalb von 48 Stunden. Die Komplette Seelenpartner-Vision kostet 67&nbsp;$: die Zeichnung in Farbe, bevorzugte Lieferung in 6 Stunden und Nayas ausführliche schriftliche Beschreibung, wann und wo ihr euch begegnen werdet. Nur eine einmalige Zahlung – niemals ein Abo.</p></details>
+    <details><summary>Warum sollte ich dir vertrauen?</summary><p>Jede Zeichnung wird von Naya Vale von Hand und ganz individuell für dich angefertigt – niemals nach Vorlage. Für jede Bestellung gilt eine 30-tägige Geld-zurück-Garantie: Wenn du keine Verbindung zu deiner Zeichnung spürst, melde dich innerhalb von 30 Tagen und du bekommst den vollen Betrag zurück. Die Zeichnungen dienen der Unterhaltung – mit Liebe und ehrlich in Bezug darauf, was sie sind.</p></details>
+    <details><summary>Kann ich mit PayPal bezahlen?</summary><p>Die Zahlung läuft sicher über Stripe – alle gängigen Kreditkarten, Apple Pay und Google Pay werden auf der sicheren Stripe-Bezahlseite akzeptiert. Keine versteckten Kosten, keine wiederkehrenden Abbuchungen.</p></details>
+    <details><summary>Wann bekomme ich meine Zeichnung?</summary><p>Die Standardlieferung erfolgt innerhalb von 48 Stunden. Bestellungen der Kompletten Seelenpartner-Vision werden bevorzugt bearbeitet und kommen innerhalb von 6 Stunden. Deine Zeichnung wird per WhatsApp an die Nummer geschickt, die du im Quiz angibst.</p></details>
+  </div></section>
+
+  <section style="background:#fdf3e3"><div class="wrap center">
+    <div class="stars">★★★★★</div>
+    <!-- Social-proof numbers here are the original funnel's sample numbers (see hero note) — replace with verified Naya Vale numbers before launch. -->
+    <div class="section-proof"><span><strong>4,9/5</strong> · <strong>über 43.287 glückliche Kunden</strong></span></div>
+    <h2 style="margin-top:10px">Ohne Risiko – 30 Tage Geld-zurück-Garantie</h2>
+    <p class="hint" style="max-width:520px;margin:6px auto 16px">Wenn deine Zeichnung nichts in dir bewegt, schreib uns innerhalb von 30 Tagen und du bekommst jeden Cent zurück.</p>
+    <button class="btn btn-green" data-goto-quiz>✦ Meine Seelenpartner-Zeichnung starten</button>
+    <p class="hint">Risikofreier Kauf – 30 Tage Geld-zurück-Garantie</p>
+  </div></section>
+
+  <footer><div class="wrap">
+    <div class="flogo">Naya Vale</div>
+    <div style="font-size:.66rem;font-weight:700;letter-spacing:.22em">MEDIALE KÜNSTLERIN</div>
+    <div class="flinks"><a href="#landing" data-goto-landing>Datenschutz</a>·<a href="#landing" data-goto-landing>AGB</a>·<a href="#landing" data-goto-landing>Rückerstattung</a>·<a href="#landing" data-goto-landing>Kontakt</a>·<a href="#landing" data-goto-landing>Haftungsausschluss</a></div>
+    <p>Copyright 2026 Naya Vale. Alle Rechte vorbehalten.</p>
+    <p class="fine"><strong>Werbehinweis:</strong> Diese Website steht in keiner Verbindung zu Facebook Inc., Google LLC, TikTok oder Instagram und wird von diesen weder unterstützt noch gesponsert. Alle Marken gehören ihren jeweiligen Inhabern.</p>
+    <p class="fine"><strong>Haftungsausschluss:</strong> Mit der Nutzung meiner Dienste bestätigst du, dass ich weder approbierte Psychologin noch Anwältin oder medizinische Fachkraft bin und meine Dienste keine Beratung durch Anwälte, Psychologen oder andere Fachkräfte des Gesundheitswesens ersetzen. Alle meine Zeichnungen und Deutungen dienen ausschließlich der Unterhaltung und sind möglicherweise nicht einzigartig. Zahlungen werden sicher über Stripe abgewickelt – einmaliger Kauf, kein Abo.</p>
+  </div></footer>
+</div>
+
+<!-- ============ VIEW: QUIZ (kept exactly as the original) ============ -->
+<div class="view" id="view-quiz">
+  <div class="quiz-head"><p>Fast geschafft …</p><strong>Beantworte nur ein paar einfache Fragen, damit ich deinen Seelenpartner genau zeichnen kann …</strong></div>
+  <div class="quiz-shell">
+    <div class="progress" id="quiz-progress"><span></span><span></span><span></span><span></span><span></span></div>
+    <div class="error" id="quiz-error"></div>
+
+    <div class="qstep" data-step="1">
+      <h2>Zu wem fühlst du dich hingezogen?</h2><p class="hint">Tippe auf deine Antwort</p>
+      <button class="opt" data-q="interest" data-val="Männer">Ich mag Männer</button>
+      <button class="opt" data-q="interest" data-val="Frauen">Ich mag Frauen</button>
+      <button class="opt" data-q="interest" data-val="Beide">Ich mag beide</button>
+    </div>
+
+    <div class="qstep" data-step="2" hidden>
+      <h2>Wann bist du geboren?</h2><p class="hint">Wähle dein Geburtsdatum – Naya liest daraus deine Energie und deinen Lebensweg.</p>
+      <div class="grid3">
+        <div><label for="dob-d">Tag</label><select class="field" id="dob-d"></select></div>
+        <div><label for="dob-m">Monat</label><select class="field" id="dob-m"></select></div>
+        <div><label for="dob-y">Jahr</label><select class="field" id="dob-y"></select></div>
+      </div>
+      <button class="btn btn-green btn-block" id="dob-next">Weiter ›</button>
+    </div>
+
+    <div class="qstep" data-step="3" hidden>
+      <h2>Was ist deine ethnische Herkunft?</h2><p class="hint">Das hilft Naya, deinen Seelenpartner genauer zu zeichnen.</p>
+      <button class="opt" data-q="ethnicity" data-val="Weiß / europäisch">Weiß / europäisch</button>
+      <button class="opt" data-q="ethnicity" data-val="Schwarz / afrikanischer Abstammung">Schwarz / afrikanischer Abstammung</button>
+      <button class="opt" data-q="ethnicity" data-val="Hispanisch / lateinamerikanisch">Hispanisch / lateinamerikanisch</button>
+      <button class="opt" data-q="ethnicity" data-val="Indigen-amerikanisch">Indigen-amerikanisch</button>
+      <button class="opt" data-q="ethnicity" data-val="Please specify">Andere (bitte angeben)</button>
+      <input class="field" id="ethnicity-other" placeholder="Bitte gib deine Herkunft an …" hidden>
+    </div>
+
+    <div class="qstep" data-step="4" hidden>
+      <h2>Wie heißt du?</h2><p class="hint">Dein Vorname genügt – Naya spricht ihn laut aus, bevor sie beginnt.</p>
+      <input class="field" id="quiz-name" type="text" autocomplete="given-name" placeholder="z.&nbsp;B. Lena">
+      <button class="btn btn-green btn-block" id="name-next">Weiter ›</button>
+    </div>
+
+    <div class="qstep" data-step="5" hidden>
+      <h2>Letzter Schritt – wohin soll Naya deine Zeichnung schicken?</h2>
+      <p class="hint">🔒 Deine Daten sind sicher – kein Spam, versprochen. Deine Zeichnung wird per WhatsApp geliefert.</p>
+      <label for="quiz-wa">WhatsApp-Nummer</label>
+      <div class="phone-row">
+        <select class="field" id="quiz-cc" aria-label="Ländervorwahl" autocomplete="tel-country-code"></select>
+        <input class="field" id="quiz-wa" type="tel" inputmode="tel" autocomplete="tel-national" placeholder="(555) 123-4567">
+      </div>
+      <label class="consent"><input type="checkbox" id="quiz-consent">
+        <span><strong>JA!</strong> Ich bestätige, dass ich mindestens 18 Jahre alt bin. Ich bin einverstanden, Nachrichten von Naya Vale zu erhalten – darunter meine Seelenpartner-Zeichnung und passende Inhalte – per WhatsApp und E-Mail. Ich erhalte niemals Spam und kann mich jederzeit abmelden. Außerdem stimme ich den Nutzungsbedingungen und der Datenschutzerklärung zu.</span></label>
+      <button class="btn btn-green btn-block" id="quiz-finish">JETZT MEINEN SEELENPARTNER ZEICHNEN ›<br><small><em>Naya verbindet sich jetzt mit deiner Energie</em></small></button>
+    </div>
+
+    <button class="btn btn-ghost" id="quiz-back">← Zurück</button>
+  </div>
+</div>
+
+<!-- ============ VIEW: OFFER / SALES PAGE (original post-quiz layout, Naya Vale) ============ -->
+<div class="view" id="view-offer">
+  <div class="narrow center" style="padding-top:30px">
+    <p class="hint" style="margin:0">Hallo <span data-name>liebe Seele</span>,</p>
+    <h1>Deine Seelenpartner-Zeichnung ist <span class="orange">fast fertig …</span></h1>
+    <p style="color:#4c586a;max-width:480px;margin:8px auto">In weniger als 48 Stunden siehst du das Gesicht des Menschen, der für dich bestimmt ist – gezeichnet von der medialen Künstlerin Naya Vale</p>
+
+    <div class="trustrow"><span>🛡️ 30 Tage Geld-zurück-Garantie</span><span>🔒 Sichere Zahlung</span></div>
+    <!-- Social-proof numbers here are the original funnel's sample numbers (see hero note) — replace with verified Naya Vale numbers before launch. -->
+    <div class="section-proof"><span class="stars" aria-hidden="true">★★★★★</span><span><strong>4,9/5</strong> von <strong>über 43.287 glücklichen Kunden</strong></span></div>
+    <button class="btn btn-orange btn-wiggle" data-scroll-choose>JA! ICH WILL MEINE ZEICHNUNG<br><small>Heute nur noch 2 Plätze frei</small></button>
+    <div class="tcard" style="margin-top:26px">
+      <div class="in">
+        <img src="/assets/img/c49ed4cff395.webp" alt="Bleistiftzeichnung eines lächelnden Mannes als Seelenpartner, gezeichnet von Naya Vale">
+        <div class="tx">
+          <p class="big">&bdquo;ICH LIEBE MEINE SEELENPARTNER-ZEICHNUNG!&ldquo;</p>
+          <p>Als sie auf WhatsApp ankam, habe ich sie eine ganze Minute lang angestarrt. Die Augen, das Lächeln – als würde ich ihn schon ewig kennen. Zwei Wochen später traf ich ihn auf der Hochzeit meiner Cousine.</p>
+          <p>Danke, Naya! – Rachel</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section style="background:var(--greybg);margin-top:36px"><div class="wrap center">
+    <h2>Das alles bekommst du</h2>
+    <div class="value-list">
+      <div class="value-row"><div class="get-ic"><svg viewBox="0 0 24 24" fill="none" stroke="#7c6bd6" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a15 15 0 010 18M12 3a15 15 0 000 18M3.5 9h17M3.5 15h17"/></svg></div><div><strong>Mediale Seelenpartner-Zeichnung</strong><p>Eine detaillierte Zeichnung des Menschen, der für dich bestimmt ist – digital geliefert zum Herunterladen und Behalten.</p></div><span class="pr">147&nbsp;$</span></div>
+      <div class="value-row"><div class="get-ic"><svg viewBox="0 0 24 24" fill="none" stroke="#4a90d9" stroke-width="2"><path d="M12 3l1.9 4.6L18.5 9l-4.6 1.4L12 15l-1.9-4.6L5.5 9l4.6-1.4L12 3z"/></svg></div><div><strong>GRATIS-BONUS: Schutzengel-Deutung</strong><p>Erfahre, wer dein Schutzengel ist und welche Botschaft er gerade für dich hat.</p></div><span class="pr">98&nbsp;$</span></div>
+      <div class="value-row"><div class="get-ic"><svg viewBox="0 0 24 24" fill="none" stroke="#e75480" stroke-width="2"><path d="M5 4h11a3 3 0 013 3v13H8a3 3 0 01-3-3V4z"/><path d="M5 16a3 3 0 013-3h11"/></svg></div><div><strong>GRATIS-BONUS: So ziehst du deinen Seelenpartner schneller an</strong><p>Ein E-Book mit praktischen und spirituellen Tipps, damit du die Liebe schneller manifestierst.</p></div><span class="pr">27&nbsp;$</span></div>
+      <div class="value-row"><div class="get-ic"><svg viewBox="0 0 24 24" fill="none" stroke="#2bb3a3" stroke-width="2"><path d="M12 21s-7.5-4.9-9.7-9.2C.7 8.6 2.6 5 6.1 5c2 0 3.4 1.1 4.2 2.3h3.4C14.5 6.1 15.9 5 17.9 5c3.5 0 5.4 3.6 3.8 6.8C19.5 16.1 12 21 12 21z" transform="scale(.92) translate(1,0)"/></svg></div><div><strong>GRATIS-BONUS: Geführte Masterclass zur Aura-Reinigung</strong><p>Löse negative Energie und öffne dein Herz, um deinen vorbestimmten Seelenpartner anzuziehen.</p></div><span class="pr">50&nbsp;$</span></div>
+    </div>
+    <div class="total-box">
+      <p class="hint" style="margin:0">Gesamtwert: <span class="strike">262&nbsp;$</span></p>
+      <p style="font-family:'Playfair Display',serif;font-size:1.7rem;font-weight:800;color:var(--navy);margin:2px 0">Ab <span style="color:var(--green-dark)">37&nbsp;$</span></p>
+      <p style="color:var(--green-dark);font-weight:700;margin:0">Spare bis zu 225&nbsp;$</p>
+    </div>
+  </div></section>
+
+  <section><div class="wrap center">
+    <h2>Sieh, was andere bekommen haben</h2>
+    <p class="hint">Links Nayas Zeichnung – und was danach geschah, in den Worten unserer Kunden.</p>
+    <div class="pairs">
+      <div class="paircard"><img src="/assets/img/c49ed4cff395.webp" alt="Seelenpartner-Zeichnung eines Mannes mit kurzen dunklen Haaren, gezeichnet für Sarah"><span class="arr">→</span><div class="photo">&bdquo;Drei Wochen nachdem die Zeichnung ankam, traf ich Daniel beim Grillabend einer Freundin. Dieselben Augen, dasselbe Lächeln – ich habe ihn erkannt, bevor er überhaupt Hallo gesagt hat.&ldquo;<br><strong>— Sarah</strong></div></div>
+      <div class="paircard"><img src="/assets/img/68588b30ae11.webp" alt="Seelenpartner-Zeichnung einer Frau mit langen, welligen Haaren, gezeichnet für Andrew"><span class="arr">→</span><div class="photo">&bdquo;Das ist die Zeichnung, die Andrew bekommen hat. Zwei Wochen später traf er sie auf der Hochzeit seines Cousins – sie trug ihr Haar genau so.&ldquo;<br><strong>— Andrew</strong></div></div>
+      <div class="paircard"><img src="/assets/img/035e0dfc8ed2.webp" alt="Seelenpartner-Zeichnung eines Mannes mit lockigen Haaren und Bart, gezeichnet für Priya"><span class="arr">→</span><div class="photo">&bdquo;Die Locken, der Bart, sogar der gütige Blick. Als er in meinen Buchclub kam, hat mein Herz wie wild geklopft.&ldquo;<br><strong>— Priya</strong></div></div>
+      <div class="paircard"><img src="/assets/img/ad9f34111b29.webp" alt="Seelenpartner-Zeichnung einer Frau mit lockigen Haaren, gezeichnet für Marcus"><span class="arr">→</span><div class="photo">&bdquo;Ich bin ihr in einem Café in der Nähe meines Büros begegnet – der Frau aus meiner Zeichnung, im echten Leben. Es fühlte sich an wie Schicksal.&ldquo;<br><strong>— Marcus</strong></div></div>
+    </div>
+  </div></section>
+
+  <section><div class="wrap center">
+    <h2>Geschichten meiner Kunden</h2>
+    <!-- Social-proof numbers here are the original funnel's sample numbers (see hero note) — replace with verified Naya Vale numbers before launch. -->
+    <div class="section-proof"><span class="stars" aria-hidden="true">★★★★★</span><span><strong>4,9/5</strong> · Schließ dich <strong>über 43.287 glücklichen Kunden</strong> an</span></div>
+    <div class="story">
+      <p class="q">&bdquo;Zwei Wochen nach meiner Zeichnung traf ich meinen Seelenpartner.&ldquo;</p>
+      <p>Meine Zeichnung kam an einem Dienstagabend auf WhatsApp. Ich weiß noch, wie ich sein Gesicht herangezoomt habe – kurze dunkle Haare, das sanfteste Lächeln – und dachte: <em>Er kommt mir bekannt vor</em>. Laut Nayas Beschreibung würden wir uns dort begegnen, wo Musik spielt, über Menschen, die ich schon kannte. Zwei Wochen später, beim Grillabend einer Freundin, kam Daniel herein. Ich habe ihn erkannt, bevor wir überhaupt ein Wort gewechselt hatten. Seitdem sind wir unzertrennlich.</p>
+      <div class="who"><span class="avatar">S</span><div><span class="stars" style="font-size:.95rem">★★★★★</span><br><strong>Sarah M.</strong> <span class="hint">· hat ihre Zeichnung in 48 Stunden erhalten</span></div></div>
+    </div>
+    <div class="story">
+      <p class="q">&bdquo;Sie trug ihr Haar genau wie auf der Zeichnung.&ldquo;</p>
+      <p>Ganz ehrlich: Ich habe halb aus Neugier bestellt. Die farbige Zeichnung, die Naya mir schickte, zeigte eine Frau mit schulterlangen braunen Haaren und dem wärmsten Lächeln. Zwei Wochen später war ich auf der Hochzeit meines Cousins – und da war sie: dieselben Haare, dasselbe Lächeln, lachend am Nachbartisch. In der Woche darauf habe ich ihr beim Kaffee die Zeichnung gezeigt. Sie konnte es selbst kaum glauben.</p>
+      <div class="who"><span class="avatar">A</span><div><span class="stars" style="font-size:.95rem">★★★★★</span><br><strong>Andrew</strong> <span class="hint">· Komplette Seelenpartner-Vision, geliefert in 6 Stunden</span></div></div>
+    </div>
+    <div class="story">
+      <p class="q">&bdquo;Als er hereinkam, hat mein Herz wie wild geklopft.&ldquo;</p>
+      <p>Naya zeichnete einen Mann mit lockigen Haaren und Bart und schrieb, dass ich ihm an einem ruhigen Ort voller Bücher begegnen würde. Damals habe ich gelacht. Dann trat er meinem Buchclub bei – Locken, Bart und genau dieser gütige Blick aus der Zeichnung. Heute steht die Zeichnung gerahmt auf meinem Schreibtisch, direkt neben der Stelle, an der er immer seinen Kaffee abstellt.</p>
+      <div class="who"><span class="avatar">P</span><div><span class="stars" style="font-size:.95rem">★★★★★</span><br><strong>Priya K.</strong> <span class="hint">· hat ihre Zeichnung in 48 Stunden erhalten</span></div></div>
+    </div>
+  </div></section>
+
+  <section style="background:var(--greybg)"><div class="wrap center">
+    <h2>Das sagen die Leute in den sozialen Medien</h2>
+    <!-- Social-proof numbers here are the original funnel's sample numbers (see hero note) — replace with verified Naya Vale numbers before launch. -->
+    <div class="section-proof"><span class="stars" aria-hidden="true">★★★★★</span><span><strong>4,9/5</strong> · <strong>über 43.287 glückliche Kunden</strong> teilen ihre Zeichnungen</span></div>
+    <p class="hint">Echte Beiträge von Kunden, mit Erlaubnis geteilt.</p>
+    <div class="fb-grid">
+      <div class="fb"><div class="hd"><span class="avatar">A</span><div><strong>Andrew</strong><br><span class="hint">Facebook · vor 2 Tagen</span></div></div>
+        <p>Okay, das muss ich einfach teilen. Ich habe meine Seelenpartner-Zeichnung von Naya Vale bekommen und SIE zwei Wochen später auf der Hochzeit meines Cousins GETROFFEN. Dieselben Haare, dasselbe Lächeln. Ich bin immer noch sprachlos 😭❤️</p>
+        <img src="/assets/img/b11c3c704a91.webp" alt="Andrews farbige Seelenpartner-Zeichnung aus seinem Facebook-Beitrag">
+        <div class="acts"><span>👍 Gefällt mir</span><span>💬 Kommentieren</span><span>↗ Teilen</span></div></div>
+      <div class="fb"><div class="hd"><span class="avatar">P</span><div><strong>Priya K.</strong><br><span class="hint">Facebook · vor 5 Tagen</span></div></div>
+        <p>Das ist die Zeichnung, die Naya für mich gemacht hat … und letzte Woche kam ER in meinen Buchclub. Locken, Bart, einfach alles. Mir hat es glatt den Atem verschlagen. Danke, Naya!! ✨</p>
+        <img src="/assets/img/035e0dfc8ed2.webp" alt="Priyas Seelenpartner-Zeichnung eines Mannes mit lockigen Haaren und Bart aus ihrem Facebook-Beitrag">
+        <div class="acts"><span>👍 Gefällt mir</span><span>💬 Kommentieren</span><span>↗ Teilen</span></div></div>
+    </div>
+  </div></section>
+
+  <section><div class="narrow">
+    <h2 class="center">Wer ist Naya Vale?</h2>
+    <div class="center"><img src="/assets/img/1e29cddeaa49.webp" alt="Naya Vale, mediale Künstlerin, lächelnd an ihrem Schreibtisch mit Stiften und einer Zeichnung in ihrem gemütlichen Atelier" style="width:190px;height:190px;object-fit:cover;object-position:center 18%;border-radius:50%;margin:14px auto;box-shadow:var(--shadow)"></div>
+    <p>Naya Vale ist eine mediale Künstlerin, die das Gesicht des Menschen zeichnet, dem du begegnen sollst. In aller Ruhe, mit deinen Quiz-Antworten – deinem Geburtsdatum, deinem Namen, der Energie, die du in dir trägst – empfängt sie das Bild, das zu ihr kommt, und zeichnet es von Hand mit Bleistift, ein Porträt nach dem anderen.</p>
+    <p>Jede Zeichnung entsteht individuell, niemals nach Vorlage, und wird dir privat per WhatsApp geschickt – zusammen mit ihrer Deutung, wann und wo ihr euch wahrscheinlich begegnen werdet. Nayas Arbeit wird mit Liebe und zur Unterhaltung angeboten – und für jede Bestellung gilt ihre 30-tägige Geld-zurück-Garantie.</p>
+  </div></section>
+
+  <section style="background:var(--greybg)" id="offer-choose"><div class="wrap center">
+    <h2>Wähle dein Paket:</h2>
+    <!-- Social-proof numbers here are the original funnel's sample numbers (see hero note) — replace with verified Naya Vale numbers before launch. -->
+    <div class="section-proof"><span class="stars" aria-hidden="true">★★★★★</span><span><strong>4,9/5</strong> von <strong>über 43.287 glücklichen Kunden</strong></span></div>
+    <div class="price-cards">
+      <div class="card price-card">
+        <h3>Basic-Seelenpartner-Zeichnung</h3><div class="price">37&nbsp;$</div>
+        <ul class="checklist">
+          <li>Bleistiftzeichnung in Schwarz-Weiß</li>
+          <li>Lieferung innerhalb von 48 Stunden</li>
+          <li>Per WhatsApp + Kopie per E-Mail</li>
+          <li class="no">Keine schriftliche Beschreibung, keine Details zur Begegnung</li>
+        </ul>
+        <button class="btn btn-plum btn-block" data-choose="basic">Basic wählen – 37&nbsp;$</button>
+      </div>
+      <div class="card price-card featured">
+        <span class="ribbon">EMPFOHLEN</span>
+        <h3>Komplette Seelenpartner-Vision</h3><div class="price">67&nbsp;$</div>
+        <ul class="checklist">
+          <li>Farbige Zeichnung (mit Augen- &amp; Haarfarbe)</li>
+          <li><strong>SCHNELLE Express-Lieferung in 6 Stunden</strong></li>
+          <li>Ausführliche Beschreibung – wann &amp; wo ihr euch begegnet, Initialen, Beruf &amp; mehr</li>
+          <li>Alle GRATIS-Boni inklusive</li>
+        </ul>
+        <button class="btn btn-green btn-block" data-choose="complete">JA! Komplette Vision holen – 67&nbsp;$</button>
+      </div>
+    </div>
+    <p class="hint mt">🛡️ 30 Tage Geld-zurück-Garantie · Sichere Bezahlung · Einmalzahlung, kein Abo</p>
+    <p><button class="btn btn-ghost" data-goto-landing>← Zurück zum Anfang</button></p>
+  </div></section>
+</div>
+
+<!-- ============ VIEW: CHECKOUT ============ -->
+<div class="view" id="view-checkout">
+  <div class="wrap co-wrap">
+    <h1 class="center co-title">ICH ZEICHNE DEINEN SEELENPARTNER</h1>
+    <p class="center co-sub"><strong>Nur noch wenige Sekunden, bis du das Gesicht deines Seelenpartners entdeckst</strong></p>
+
+    <!-- Payment sits first so the pay form / Pay Now button is above the fold on phones; full order details + bonuses follow below. -->
+    <div class="card co-card">
+      <div class="co-mini">
+        <div><strong id="co-package">—</strong><div class="co-mini-sub" id="co-mini-sub">🎁 + 3 GRATIS-Boni inklusive</div></div>
+        <div class="co-mini-total" id="co-total">—</div>
+      </div>
+      <!-- Stripe Embedded Checkout mounts here (session created by /.netlify/functions/create-checkout). If that isn't configured, the Pay Now Payment Link below is shown instead. -->
+      <div id="stripe-embed"></div>
+      <div id="stripe-fallback" hidden>
+        <a class="btn btn-green btn-block" id="stripe-pay-btn" href="#">Jetzt bezahlen</a>
+        <div class="co-cards"><span class="badge">💳 Visa</span><span class="badge">💳 Mastercard</span><span class="badge">💳 Amex</span><span class="badge"> Apple Pay</span><span class="badge"> Google Pay</span></div>
+      </div>
+      <p class="stripe-note" style="margin-top:12px">🔒 Sichere, verschlüsselte Zahlung über Stripe · Einmalige Abbuchung · Niemals ein Abo</p>
+    </div>
+
+    <div class="card mt">
+      <h3>Deine Bestellung</h3>
+      <div class="summary-box"><dl>
+        <dt>Paket</dt><dd id="co-package-full">—</dd>
+        <dt>Für</dt><dd><span data-name>—</span> · interessiert an: <span id="co-interest">—</span></dd>
+        <dt>Lieferung</dt><dd id="co-delivery">WhatsApp</dd>
+        <dt>Senden an</dt><dd id="co-deliver-to">Deine WhatsApp-Nummer aus dem Quiz</dd>
+        <dt>Heute fällig</dt><dd><strong id="co-total-full">—</strong> <span class="hint">(einmalig, kein Abo)</span></dd>
+      </dl></div>
+      <div class="co-bonus" id="co-bonus"></div>
+      <p class="hint center mt">Sobald deine Zahlung abgeschlossen ist, landest du direkt auf deiner Dankeseite – und Naya beginnt zu zeichnen.</p>
+    </div>
+    <div class="badge-row"><span class="badge">🔒 Sichere Bestellung</span><span class="badge">💬 Lieferung per WhatsApp</span><span class="badge">✅ Bestpreis-Garantie</span></div>
+    <p class="center"><button class="btn btn-ghost" id="co-back">← Anderes Paket wählen</button></p>
+  </div>
+</div>
+
+<!-- ============ VIEW: UPSELL (shown after Basic) ============ -->
+<div class="view" id="view-upsell">
+  <div class="wrap" style="max-width:680px;padding-top:34px;padding-bottom:60px">
+    <p class="center" style="color:var(--green-dark);font-weight:700;margin:0">Herzlichen Glückwunsch!</p>
+    <h1 class="center" style="font-size:2.2rem">DU HAST GRATIS-BONI FREIGESCHALTET!</h1>
+    <p class="center" style="margin:4px 0 12px">Sichere dir Boni im Wert von <strong>133,95&nbsp;$</strong> GRATIS mit der Kompletten Seelenpartner-Vision.</p>
+    <a class="btn btn-green btn-block" id="upsell-top-btn" href="#" style="margin-bottom:16px">JA! Komplette Vision holen – 67&nbsp;$<br><small>Inklusive aller 3 GRATIS-Boni</small></a>
+    <div class="card center" style="background:var(--navy);color:#fff;border:0">
+      <div style="font-size:1.5rem;font-weight:700;color:#7ee2a0">GRATIS-UPGRADE-BONUS!</div>
+      <div class="serif" style="font-size:2.4rem;color:#ffd97a">IM WERT VON 133,95&nbsp;$</div>
+      <ul style="text-align:left;max-width:420px;margin:12px auto;line-height:1.9">
+        <li>★ GRATIS Express-Lieferung (maximal 6 Stunden)</li>
+        <li>★ GRATIS Seelenpartner-Beschreibung</li>
+        <li>★ GRATIS Upgrade auf farbige Zeichnung</li>
+      </ul>
+      <p style="opacity:.85;font-size:.92rem">Aktiviere deine Gratis-Boni, indem du unten das Paket Komplette Seelenpartner-Vision wählst.</p>
+    </div>
+
+    <div class="mt">
+      <div class="card"><h3>⚡ Express-Lieferung <span class="hint">(normalerweise 51&nbsp;$)</span></h3><p>Erhalte deine Zeichnung innerhalb von 6 statt 48 Stunden.</p></div>
+      <div class="card mt"><h3>📜 Beschreibung deines Seelenpartners <span class="hint">(normalerweise 47&nbsp;$)</span></h3><p>Wann &amp; wo ihr euch begegnet, Initialen, Beruf, Persönlichkeit und Sternzeichen.</p></div>
+      <div class="card mt"><h3>🎨 Upgrade auf farbige Zeichnung <span class="hint">(normalerweise 35,95&nbsp;$)</span></h3><p>Sieh die Gesichtszüge und Augenfarbe deines Seelenpartners in lebendigen Farben.</p></div>
+    </div>
+    <p class="center mt" style="background:#e6f7ec;border-radius:10px;padding:12px">Diese 3 Boni im Wert von <strong>133,95&nbsp;$</strong> sind im Komplett-Paket <strong>GRATIS</strong>.</p>
+    <p class="center" style="color:var(--rose);font-weight:700">Aktuelle Nachfrage: HOCH<br>Nur noch 1 Platz frei …</p>
+    <p class="center"><strong>Wähle dein Paket:</strong></p>
+
+    <div class="card price-card featured">
+      <span class="ribbon">67&nbsp;$</span>
+      <h3>Komplette Seelenpartner-Vision</h3><p class="hint">EMPFOHLEN – inklusive GRATIS-Boni im Wert von 133,95&nbsp;$</p>
+      <ul class="checklist">
+        <li>Farbige Seelenpartner-Zeichnung (mit Augenfarbe)</li>
+        <li>SCHNELLE Lieferung in 6 Stunden (bevorzugte Bearbeitung)</li>
+        <li>Ausführliche Beschreibung – wann, wo, Initialen, Beruf &amp; mehr</li>
+      </ul>
+      <a class="btn btn-green btn-block" id="upsell-stripe-btn" href="#">JA! Komplette Vision holen – 67&nbsp;$</a>
+    </div>
+
+    <div class="card mt">
+      <span style="float:right;font-weight:700">37&nbsp;$</span>
+      <h3>Basic-Seelenpartner-Zeichnung</h3><p class="hint">Ohne alle Gratis-Boni</p>
+      <ul class="checklist">
+        <li class="no">Nur Schwarz-Weiß-Zeichnung</li>
+        <li class="no">48 Stunden Wartezeit (normale Warteschlange)</li>
+        <li class="no">Keine Beschreibung, keine Details zur Begegnung</li>
+      </ul>
+      <button class="btn btn-plum btn-block" id="upsell-keep-basic">Nein danke, ich bleibe bei der Basic-Zeichnung für 37&nbsp;$</button>
+    </div>
+    <p class="center hint mt">🛡️ 30 Tage Geld-zurück-Garantie · Null Risiko · Sichere Bezahlung</p>
+  </div>
+</div>
+
+<!-- ============ VIEW: THANK YOU ============ -->
+<div class="view" id="view-thankyou">
+  <div class="wrap" style="max-width:680px;padding-top:40px;padding-bottom:60px">
+    <div class="center" style="font-size:3rem">💌</div>
+    <h1 class="center">Danke, <span data-name>liebe Seele</span> – deine Bestellung ist bestätigt</h1>
+    <p class="center" style="font-size:1.1rem">Naya hat deine Energie und deine Antworten empfangen. Sie wird nun in Ruhe in sich gehen, sich einstimmen und <strong>deinen Seelenpartner von Hand mit Bleistift zeichnen</strong><span id="ty-color-note"></span>.</p>
+    <div class="card center mt" style="border:2px solid var(--wa)">
+      <div style="font-size:2rem">💬</div>
+      <h3>Behalte dein WhatsApp im Blick</h3>
+      <p>Deine fertige Zeichnung wird dir innerhalb von <strong id="ty-time">48 Stunden</strong><span id="ty-time-note"></span> per WhatsApp an <strong id="ty-wa">deine Nummer</strong> geschickt. Eine Kopie geht an <span id="ty-email">deine E-Mail-Adresse</span>.</p>
+      <p class="hint">Speichere die Nummer von Nayas Atelier, sobald die erste Nachricht ankommt, damit das Bild problemlos zugestellt wird – und schau sicherheitshalber auch in deinen Spam-Ordner.</p>
+    </div>
+    <div class="card mt">
+      <h3>Deine Antworten an Naya</h3>
+      <div class="summary-box"><dl>
+        <dt>Name</dt><dd id="ty-name">—</dd>
+        <dt>Interessiert an</dt><dd id="ty-interest">—</dd>
+        <dt>Geburtsdatum</dt><dd id="ty-dob">—</dd>
+        <dt>Herkunft</dt><dd id="ty-ethnicity">—</dd>
+        <dt>WhatsApp</dt><dd id="ty-wa2">—</dd>
+        <dt>Paket</dt><dd id="ty-package">—</dd>
+      </dl></div>
+      <p class="hint mt">Stimmt etwas nicht? Antworte sofort auf deine Bestellbestätigung per E-Mail, und Naya zeichnet mit den korrigierten Angaben neu.</p>
+    </div>
+    <div class="center mt">
+      <button class="btn btn-plum" data-goto-landing>← Zurück zu Nayas Atelier</button>
+    </div>
+    <p class="center hint mt">Nur zu Unterhaltungszwecken. Bitte warte die volle Lieferzeit ab, bevor du den Support kontaktierst – jede Zeichnung wird von Hand und der Reihe nach angefertigt.</p>
+  </div>
+</div>
+
+<!-- ============ EXIT-INTENT POPUP (checkout) ============ -->
+<div class="modal-overlay" id="exit-modal" role="dialog" aria-modal="true" aria-labelledby="exit-title">
+  <div class="modal">
+    <button class="close-x" id="exit-close" aria-label="Schließen">×</button>
+    <h2 id="exit-title">Ich spüre deine Energie!</h2>
+    <p>Ich spüre einen Moment der Synchronizität …</p>
+    <p>Wenn du diese Nachricht siehst, lenkt dich das Universum vielleicht gerade zu einer entscheidenden Entdeckung …</p>
+    <p><strong>Wenn du diese Seite verlässt, verlierst du deinen Rabatt von 40&nbsp;%!</strong></p>
+    <p>Deine Chance, das Gesicht deines Seelenpartners zu sehen, schwindet …</p>
+    <p><strong>Ich kann deinen Seelenpartner nur heute zeichnen.</strong> Lass ihn dir also nicht entgehen!</p>
+    <p>Keine Sorge: Deine Zahlung ist absolut sicher! 🔒</p>
+    <p>Keine versteckten Abos, keine unerwarteten Kosten. Nur ein Tor zu der Liebe, die auf dich wartet. 💗</p>
+    <p>Das ist nicht nur eine Zeichnung … es ist ein Schritt zu deinem Schicksal!</p>
+    <p><em>Bist du bereit, es anzunehmen?</em></p>
+    <button class="btn btn-green btn-block" id="exit-stay" style="background:#e02424;box-shadow:none">Ja, zeichne meinen vorbestimmten Seelenpartner</button>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   STRIPE PAYMENT LINKS — LIVE
+   Basic Soulmate Sketch $37 / Complete Soulmate Vision $67
+   (Stripe Dashboard → Payment Links)
+   ============================================================ */
+var STRIPE_LINKS = {
+  basic:    "https://buy.stripe.com/fZu14m2Te3h62ea4fB4Ni0J",
+  complete: "https://buy.stripe.com/9B6bJ0alGaJy4mi4fB4Ni0K"
+};
+
+var state = { interest:"", dob:"", ethnicity:"", name:"", whatsapp:"", email:"", pkg:"complete" };
+var step = 1, exitShown = false;
+
+/* --- Meta tracking (Pixel + CAPI helper defined in <head>) --- */
+var metaICAt = 0, metaICPkg = '', metaPurchaseFired = false, metaPaidOrder = false;
+function metaSyncUser(){ if(window.MetaCAPI) window.MetaCAPI.setUser(state.email||'', state.whatsapp||''); }
+function metaPkgData(){
+  var complete = state.pkg==='complete';
+  return { content_name: complete ? 'Complete Soulmate Vision' : 'Basic Soulmate Sketch', content_category:'Soulmate Sketch', content_ids:[state.pkg], content_type:'product', value: complete ? 67 : 37, currency:'USD' };
+}
+function fireInitiateCheckout(source){
+  var now = Date.now();
+  if(metaICPkg===state.pkg && now-metaICAt < 10*60*1000) return; /* reaching checkout already counted for this package */
+  metaICPkg = state.pkg; metaICAt = now; metaSyncUser();
+  if(window.trackMetaEvent) window.trackMetaEvent('InitiateCheckout', metaPkgData());
+}
+function firePurchase(){
+  if(metaPurchaseFired) return;
+  metaPurchaseFired = true; metaSyncUser();
+  var d = metaPkgData(); d.num_items = 1;
+  if(window.trackMetaEvent) window.trackMetaEvent('Purchase', d);
+}
+
+function show(view){
+  document.querySelectorAll('.view').forEach(function(v){ v.classList.remove('active'); });
+  document.getElementById('view-'+view).classList.add('active');
+  window.scrollTo(0,0);
+  if(view==='checkout'){ wireStripeButtons(); fireInitiateCheckout('checkout-view'); mountStripeCheckout(); }
+  history.replaceState(null,'','#'+view);
+}
+function syncNames(){
+  document.querySelectorAll('[data-name]').forEach(function(el){ el.textContent = state.name || 'liebe Seele'; });
+}
+function err(id,msg){ var e=document.getElementById(id); if(msg){ e.textContent=msg; e.style.display='block'; } else { e.style.display='none'; } }
+
+/* Landing → quiz */
+document.querySelectorAll('[data-goto-quiz]').forEach(function(b){ b.addEventListener('click', function(){ show('quiz'); setStep(1); }); });
+document.querySelectorAll('[data-goto-landing]').forEach(function(b){ b.addEventListener('click', function(){ show('landing'); }); });
+
+/* Offer orange CTAs → scroll to package choice */
+document.querySelectorAll('[data-scroll-choose]').forEach(function(b){ b.addEventListener('click', function(){ document.getElementById('offer-choose').scrollIntoView({behavior:'smooth'}); }); });
+
+/* Quiz */
+function setStep(n){
+  step=n;
+  document.querySelectorAll('.qstep').forEach(function(s){ s.hidden = (+s.dataset.step!==n); });
+  document.querySelectorAll('#quiz-progress span').forEach(function(s,i){ s.classList.toggle('on', i<n); });
+  document.getElementById('quiz-back').style.visibility = n===1 ? 'hidden' : 'visible';
+  err('quiz-error','');
+}
+document.getElementById('quiz-back').addEventListener('click', function(){ if(step>1) setStep(step-1); });
+
+/* DOB selects */
+(function(){
+  var d=document.getElementById('dob-d'), m=document.getElementById('dob-m'), y=document.getElementById('dob-y');
+  var months=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  d.innerHTML='<option value="">Tag</option>'; for(var i=1;i<=31;i++) d.innerHTML+='<option>'+i+'</option>';
+  m.innerHTML='<option value="">Monat</option>'; months.forEach(function(mn,i){ m.innerHTML+='<option value="'+(i+1)+'">'+mn+'</option>'; });
+  y.innerHTML='<option value="">Jahr</option>'; var now=new Date().getFullYear(); for(var yy=now-18; yy>=now-100; yy--) y.innerHTML+='<option>'+yy+'</option>';
+  d.value='5'; m.value='5'; y.value='1983';
+})();
+
+document.querySelectorAll('.opt[data-q]').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    var q=btn.dataset.q, val=btn.dataset.val;
+    btn.parentElement.querySelectorAll('.opt').forEach(function(o){ o.classList.remove('sel'); });
+    btn.classList.add('sel');
+    if(q==='interest'){ state.interest=val; setStep(2); }
+    if(q==='ethnicity'){
+      var other=document.getElementById('ethnicity-other');
+      if(val==='Please specify'){ other.hidden=false; other.focus(); state.ethnicity=''; other.oninput=function(){ state.ethnicity=other.value; }; other.onchange=function(){ if(other.value.trim()){ state.ethnicity=other.value.trim(); setStep(4); } }; }
+      else { other.hidden=true; state.ethnicity=val; setStep(4); }
+    }
+  });
+});
+document.getElementById('dob-next').addEventListener('click', function(){
+  var d=document.getElementById('dob-d').value, m=document.getElementById('dob-m').value, y=document.getElementById('dob-y').value;
+  if(!d||!m||!y){ err('quiz-error','Bitte wähle dein vollständiges Geburtsdatum, damit Naya deine Energie genau lesen kann.'); return; }
+  var months=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  state.dob = d+'. '+months[m-1]+' '+y; setStep(3);
+});
+document.getElementById('name-next').addEventListener('click', function(){
+  var v=document.getElementById('quiz-name').value.trim();
+  if(!v){ err('quiz-error','Bitte verrate Naya deinen Namen – sie spricht ihn aus, bevor sie beginnt.'); return; }
+  state.name=v; syncNames(); setStep(5);
+});
+document.getElementById('quiz-finish').addEventListener('click', function(){
+  var wa=fullPhone();
+  if(document.getElementById('quiz-wa').value.replace(/\D/g,'').length < 6){ err('quiz-error','Bitte gib eine gültige WhatsApp-Nummer (mit Ländervorwahl) ein – dorthin wird deine Zeichnung geschickt.'); return; }
+  if(!document.getElementById('quiz-consent').checked){ err('quiz-error','Bitte setze das Häkchen, um zu bestätigen, dass du mindestens 18 bist und deine Zeichnung erhalten möchtest.'); return; }
+  state.whatsapp=wa; metaSyncUser();
+  if(window.trackMetaEvent) window.trackMetaEvent('Lead', { content_name:'Soulmate Sketch Quiz', content_category:'Soulmate Sketch' });
+  show('offer');
+});
+
+
+/* WhatsApp number — country code picker + format-as-you-type (US/CA: (555) 123-4567) */
+var COUNTRIES=[
+  ['US','🇺🇸','1','(###) ###-####'],['CA','🇨🇦','1','(###) ###-####'],['GB','🇬🇧','44','(####) ######'],
+  ['AU','🇦🇺','61','(###) ### ###'],['NZ','🇳🇿','64','(##) ### ####'],['IE','🇮🇪','353','(##) ### ####'],
+  ['ZA','🇿🇦','27','(##) ### ####'],['IN','🇮🇳','91','(#####) #####'],['PH','🇵🇭','63','(###) ### ####'],
+  ['MX','🇲🇽','52','(##) #### ####'],['BR','🇧🇷','55','(##) #####-####'],['DE','🇩🇪','49','(###) ########'],
+  ['FR','🇫🇷','33','(#) ## ## ## ##'],['ES','🇪🇸','34','(###) ### ###'],['IT','🇮🇹','39','(###) ### ####'],
+  ['NL','🇳🇱','31','(#) ########'],['AE','🇦🇪','971','(##) ### ####'],['SG','🇸🇬','65','#### ####'],
+  ['NG','🇳🇬','234','(###) ### ####'],['JM','🇯🇲','1','(###) ###-####'],
+  ['AT','🇦🇹','43','(###) #######'],['CH','🇨🇭','41','(##) ### ## ##'],['LU','🇱🇺','352','### ### ###']
+];
+(function(){
+  var sel=document.getElementById('quiz-cc'), inp=document.getElementById('quiz-wa');
+  COUNTRIES.forEach(function(c,i){ var o=document.createElement('option'); o.value=i; o.textContent=c[1]+' +'+c[2]; o.title=c[0]; sel.appendChild(o); });
+  var region=''; try{ region=((navigator.language||'').split('-')[1]||'').toUpperCase(); }catch(e){}
+  var idx=11; COUNTRIES.forEach(function(c,i){ if(c[0]===region) idx=i; }); sel.value=idx;
+  function pattern(){ return COUNTRIES[+sel.value][3]; }
+  function fmt(digits){
+    var p=pattern(), out='', di=0;
+    for(var i=0;i<p.length && di<digits.length;i++){ out += p[i]==='#' ? digits[di++] : p[i]; }
+    if(di<digits.length) out += (out?' ':'')+digits.slice(di);
+    return out;
+  }
+  function placeholder(){ var n=0; inp.placeholder=pattern().replace(/#/g,function(){ return '5551234567890'[n++]||'0'; }); }
+  function reformat(){
+    var c=COUNTRIES[+sel.value], d=inp.value.replace(/\D/g,'');
+    if(inp.value.trim().charAt(0)==='+'){ /* pasted an international number — pick its country code */
+      for(var i=0;i<COUNTRIES.length;i++){ if(d.indexOf(COUNTRIES[i][2])===0 && (COUNTRIES[i][2].length>c[2].length || d.indexOf(c[2])!==0)){ sel.value=i; c=COUNTRIES[i]; break; } }
+      if(d.indexOf(c[2])===0) d=d.slice(c[2].length);
+      placeholder();
+    }
+    if(c[2]!=='1' && d.charAt(0)==='0') d=d.slice(1); /* drop trunk 0 (e.g. UK 07…) */
+    d=d.slice(0,15-c[2].length);
+    var atEnd = inp.selectionStart===inp.value.length;
+    inp.value = d ? fmt(d) : '';
+    if(atEnd) try{ inp.setSelectionRange(inp.value.length, inp.value.length); }catch(e){}
+  }
+  inp.addEventListener('input', reformat);
+  sel.addEventListener('change', function(){ placeholder(); reformat(); inp.focus(); });
+  placeholder();
+})();
+function fullPhone(){
+  var c=COUNTRIES[+document.getElementById('quiz-cc').value], v=document.getElementById('quiz-wa').value.trim();
+  return v ? ('+'+c[2]+' '+v) : '';
+}
+
+/* Offer → checkout */
+document.querySelectorAll('[data-choose]').forEach(function(b){
+  b.addEventListener('click', function(){ state.pkg=b.dataset.choose; fillCheckout(); show('checkout'); });
+});
+function fillCheckout(){
+  var complete = state.pkg==='complete';
+  document.getElementById('co-package').textContent = document.getElementById('co-package-full').textContent = complete ? 'Komplette Seelenpartner-Vision' : 'Basic-Seelenpartner-Zeichnung';
+  document.getElementById('co-mini-sub').textContent = complete ? '🎁 + 3 GRATIS-Boni inklusive (Wert: 133,95 $)' : 'Bleistiftzeichnung · Lieferung per WhatsApp in 48 Stunden';
+  document.getElementById('co-interest').textContent = state.interest || '—';
+  document.getElementById('co-delivery').textContent = complete ? 'WhatsApp – bevorzugt, innerhalb von 6 Stunden' : 'WhatsApp – innerhalb von 48 Stunden';
+  document.getElementById('co-total').textContent = document.getElementById('co-total-full').textContent = complete ? '67 $' : '37 $';
+  var dt=document.getElementById('co-deliver-to'); if(dt) dt.textContent = state.whatsapp ? ('WhatsApp · '+state.whatsapp) : 'Deine WhatsApp-Nummer aus dem Quiz';
+  var bonuses=[['⚡','Express-Lieferung (maximal 6 Stunden)','51 $'],['📜','Beschreibung deines Seelenpartners – wann, wo, Initialen, Beruf','47 $'],['🎨','Upgrade auf farbige Zeichnung','35,95 $']];
+  var bx=document.getElementById('co-bonus');
+  if(bx){
+    bx.classList.toggle('locked', !complete);
+    bx.innerHTML = (complete ? '<h4>🎁 GRATIS-Boni in deiner Bestellung (Wert: 133,95 $)</h4>' : '<h4>🎁 GRATIS-Boni – inklusive bei der Kompletten Seelenpartner-Vision</h4>')
+      + '<ul>' + bonuses.map(function(b){ return '<li><span>'+b[0]+'</span><span>'+b[1]+'</span><span class="v"><s>'+b[2]+'</s>'+(complete?'GRATIS ✓':'nicht enthalten')+'</span></li>'; }).join('') + '</ul>'
+      + (complete ? '' : '<button class="btn btn-green btn-block mt" type="button" id="co-upgrade">Upgrade auf Komplett – alle 3 GRATIS (67 $)</button>');
+    var up=document.getElementById('co-upgrade');
+    if(up) up.addEventListener('click', function(){ state.pkg='complete'; fillCheckout(); show('checkout'); });
+  }
+  syncNames();
+}
+
+/* Stripe Embedded Checkout — the card form loads right inside the checkout view.
+   Session comes from /.netlify/functions/create-checkout; if that isn't configured
+   (no Stripe keys in Netlify yet, or opened from a file), fall back to the Payment Link button. */
+var embedded=null, embeddedPkg='', embedToken=0;
+function saveStateForReturn(){ try{ sessionStorage.setItem('naya_state', JSON.stringify(state)); }catch(e){} }
+function showPayFallback(){
+  var el=document.getElementById('stripe-embed'); el.classList.remove('loading'); el.innerHTML='';
+  document.getElementById('stripe-fallback').hidden=false;
+}
+function mountStripeCheckout(){
+  var el=document.getElementById('stripe-embed');
+  if(embedded && embeddedPkg===state.pkg) return; /* already showing the right form */
+  if(embedded){ try{ embedded.destroy(); }catch(e){} embedded=null; }
+  embeddedPkg=state.pkg; var token=++embedToken;
+  document.getElementById('stripe-fallback').hidden=true;
+  el.classList.add('loading');
+  el.innerHTML='<div class="stripe-loader"><div class="spin"></div><div>Sichere Bezahlung wird geladen …</div></div>';
+  saveStateForReturn();
+  var waitStripe=new Promise(function(res,rej){ var n=0; (function t(){ if(window.Stripe) return res(); if(++n>100) return rej(new Error('Stripe.js not loaded')); setTimeout(t,100); })(); });
+  fetch('/.netlify/functions/create-checkout',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({lang:'ger',pkg:state.pkg,name:state.name,whatsapp:state.whatsapp,interest:state.interest,dob:state.dob,ethnicity:state.ethnicity})})
+  .then(function(r){ if(!r.ok) throw new Error('checkout '+r.status); return r.json(); })
+  .then(function(d){ if(!d.clientSecret||!d.publishableKey) throw new Error('no session'); return waitStripe.then(function(){ return d; }); })
+  .then(function(d){
+    if(token!==embedToken) return;
+    return Stripe(d.publishableKey).initEmbeddedCheckout({ fetchClientSecret:function(){ return Promise.resolve(d.clientSecret); } });
+  })
+  .then(function(co){
+    if(!co) return;
+    if(token!==embedToken){ try{ co.destroy(); }catch(e){} return; }
+    embedded=co; el.innerHTML=''; el.classList.remove('loading');
+    var holder=document.createElement('div'); holder.className='stripe-fade'; el.appendChild(holder);
+    co.mount(holder);
+  })
+  .catch(function(){ if(token===embedToken){ embedded=null; embeddedPkg=''; showPayFallback(); } });
+}
+function wireStripeButtons(){
+  var link = STRIPE_LINKS[state.pkg] || '#';
+  var btn=document.getElementById('stripe-pay-btn');
+  btn.href=link; btn.textContent = 'Jetzt bezahlen';
+  ['upsell-stripe-btn','upsell-top-btn'].forEach(function(id){ var up=document.getElementById(id); if(up) up.href = STRIPE_LINKS.complete; });
+}
+document.getElementById('co-back').addEventListener('click', function(){ show('offer'); });
+
+/* Pay Now clicks also count as InitiateCheckout — fireInitiateCheckout suppresses a duplicate when reaching checkout already fired for the same package (e.g. the main checkout button). The upsell button goes straight to Stripe, so it fires here. CAPI send uses keepalive, so the event still leaves the browser as Stripe loads. */
+document.getElementById('stripe-pay-btn').addEventListener('click', function(){ saveStateForReturn(); fireInitiateCheckout('pay-now'); });
+['upsell-stripe-btn','upsell-top-btn'].forEach(function(id){ var upsellPayBtn=document.getElementById(id);
+  if(upsellPayBtn) upsellPayBtn.addEventListener('click', function(){ state.pkg='complete'; saveStateForReturn(); fireInitiateCheckout('pay-now-upsell'); }); });
+
+/* Upsell */
+document.getElementById('upsell-keep-basic').addEventListener('click', function(){ state.pkg='basic'; fillThankYou(); show('thankyou'); });
+
+/* Thank you */
+function fillThankYou(){
+  var complete = state.pkg==='complete';
+  document.getElementById('ty-name').textContent = state.name||'—';
+  document.getElementById('ty-interest').textContent = state.interest||'—';
+  document.getElementById('ty-dob').textContent = state.dob||'—';
+  document.getElementById('ty-ethnicity').textContent = state.ethnicity||'—';
+  document.getElementById('ty-wa').textContent = state.whatsapp||'deine Nummer';
+  document.getElementById('ty-wa2').textContent = state.whatsapp||'—';
+  document.getElementById('ty-email').textContent = state.email||'deine E-Mail-Adresse';
+  document.getElementById('ty-package').textContent = complete ? 'Komplette Seelenpartner-Vision – 67 $' : 'Basic-Seelenpartner-Zeichnung – 37 $';
+  document.getElementById('ty-time').textContent = complete ? '6 Stunden' : '48 Stunden';
+  document.getElementById('ty-time-note').textContent = complete ? ' (bevorzugte Komplett-Lieferung)' : ' (Standardlieferung)';
+  document.getElementById('ty-color-note').textContent = complete ? ', komplett in Farbe, mit ihrer schriftlichen Beschreibung, wann und wo ihr euch begegnen werdet' : '';
+  syncNames();
+}
+
+/* Exit-intent on checkout (desktop mouse-leave) */
+document.addEventListener('mouseout', function(e){
+  if(exitShown) return;
+  if(!document.getElementById('view-checkout').classList.contains('active')) return;
+  if(!e.relatedTarget && e.clientY < 8){ document.getElementById('exit-modal').classList.add('show'); exitShown=true; }
+});
+document.getElementById('exit-close').addEventListener('click', function(){ document.getElementById('exit-modal').classList.remove('show'); });
+document.getElementById('exit-stay').addEventListener('click', function(){ document.getElementById('exit-modal').classList.remove('show'); document.getElementById('stripe-embed').scrollIntoView({behavior:'smooth',block:'center'}); });
+
+/* Deep links: #quiz #offer #checkout #upsell #thankyou, and Stripe return ?paid=basic|complete */
+(function(){
+  var params=new URLSearchParams(location.search);
+  var paid=params.get('paid');
+  if(paid==='basic'||paid==='complete'){ try{ var saved=JSON.parse(sessionStorage.getItem('naya_state')||'null'); if(saved) Object.keys(state).forEach(function(k){ if(saved[k]) state[k]=saved[k]; }); }catch(e){} state.pkg=paid; metaPaidOrder=true; fillThankYou(); show('thankyou'); firePurchase(); return; }
+  var h=(location.hash||'').replace('#','');
+  if(['quiz','offer','checkout','upsell','thankyou'].indexOf(h)>-1){ if(h==='checkout') fillCheckout(); if(h==='thankyou') fillThankYou(); show(h); if(h==='quiz') setStep(1); }
+  /* ViewContent — landing page only (skipped on a paid return or a deep link into another view). Purchase above fires only for a real paid order (?paid=…), never for an in-page thank-you preview. */
+  if(document.getElementById('view-landing').classList.contains('active') && window.trackMetaEvent){
+    window.trackMetaEvent('ViewContent', { content_name:'Soulmate Sketch', content_category:'Soulmate Sketch', content_ids:['basic','complete'], content_type:'product', value:37, currency:'USD' });
+  }
+})();
+wireStripeButtons();
+</script>
+</body>
+</html>
