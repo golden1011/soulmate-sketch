@@ -38,6 +38,9 @@ exports.handler = async (event) => {
   const lang = Object.prototype.hasOwnProperty.call(LANGS, body.lang) ? LANGS[body.lang] : null;
   form.append('return_url', `${origin}${lang ? lang.path : '/'}?paid=${pkgKey}&session_id={CHECKOUT_SESSION_ID}#thankyou`);
   if (lang) form.append('locale', lang.locale);
+  // Links the Stripe order back to the lead row in the CRM (see /admin).
+  const leadId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.leadId || '') ? body.leadId : null;
+  if (leadId) form.append('client_reference_id', leadId);
   form.append('line_items[0][quantity]', '1');
   const priceId = process.env[pkg.priceEnv];
   if (priceId) {
@@ -48,7 +51,7 @@ exports.handler = async (event) => {
     form.append('line_items[0][price_data][product_data][name]', pkg.name);
   }
   // Quiz answers travel with the order so Naya can see who to draw for, right in the Stripe dashboard.
-  const meta = { package: pkgKey, language: lang ? lang.locale : 'en', name: body.name, whatsapp: body.whatsapp, interest: body.interest, dob: body.dob, ethnicity: body.ethnicity };
+  const meta = { lead_id: leadId, package: pkgKey, language: lang ? lang.locale : 'en', name: body.name, whatsapp: body.whatsapp, interest: body.interest, dob: body.dob, ethnicity: body.ethnicity };
   Object.keys(meta).forEach((k) => { if (meta[k]) form.append(`metadata[${k}]`, String(meta[k]).slice(0, 450)); });
   form.append('phone_number_collection[enabled]', 'false');
 
