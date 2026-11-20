@@ -20,7 +20,9 @@
        STRIPE_PUBLISHABLE_KEY (optional: STRIPE_PRICE_BASIC / STRIPE_PRICE_COMPLETE).
        Until those are set, checkout falls back to the Payment Links above.
   Deploy: connect this repo (or drag the whole folder) into Netlify so the functions deploy.
-  No database. Quiz answers travel in in-page state + sessionStorage, and with the Stripe order as metadata.
+  LEADS / MINI CRM: finished quizzes are saved to Netlify Database (/api/leads), paid orders are confirmed with
+  Stripe (/api/confirm-payment), and everything is viewed at /admin (password = ADMIN_PASSWORD env var).
+  Payment Links: add &session_id={CHECKOUT_SESSION_ID} to the "After payment" redirect so those orders are verified too.
   ============================================================
 -->
 <html lang="fr">
@@ -913,26 +915,86 @@ var STRIPE_LINKS = {
   complete: "https://buy.stripe.com/9B6bJ0alGaJy4mi4fB4Ni0K"
 };
 
-var state = { interest:"", dob:"", ethnicity:"", name:"", whatsapp:"", email:"", pkg:"complete" };
+var state = { interest:"", dob:"", ethnicity:"", name:"", whatsapp:"", email:"", pkg:"complete", leadId:"" };
 var step = 1, exitShown = false;
 
 /* --- Meta tracking (Pixel + CAPI helper defined in <head>) --- */
 var metaICAt = 0, metaICPkg = '', metaPurchaseFired = false, metaPaidOrder = false;
 function metaSyncUser(){ if(window.MetaCAPI) window.MetaCAPI.setUser(state.email||'', state.whatsapp||''); }
+
+/* --- Mini CRM: each finished quiz is saved as a lead (/api/leads), checkout + paid orders update it,
+   and paid orders are confirmed with Stripe (/api/confirm-payment). View leads at /admin.
+   Every call is fire-and-forget — a CRM failure never blocks the funnel. --- */
+var CRM_LANG = /^\/fr(\/|$)/.test(location.pathname) ? 'fr' : (/^\/ger(\/|$)/.test(location.pathname) ? 'de' : 'en');
+function crmNewId(){
+  if(window.crypto&&crypto.randomUUID){ try{ return crypto.randomUUID(); }catch(e){} }
+  var b=new Uint8Array(16);
+  if(window.crypto&&crypto.getRandomValues) crypto.getRandomValues(b); else for(var i=0;i<16;i++) b[i]=Math.floor(Math.random()*256);
+  b[6]=(b[6]&15)|64; b[8]=(b[8]&63)|128;
+  var h=Array.from(b).map(function(x){ return (x+256).toString(16).slice(1); }).join('');
+  return h.slice(0,8)+'-'+h.slice(8,12)+'-'+h.slice(12,16)+'-'+h.slice(16,20)+'-'+h.slice(20);
+}
+function crmPost(path, data){
+  try{ return fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data),keepalive:true}).catch(function(){}); }
+  catch(e){ return Promise.resolve(); }
+}
+/* Ad source of the visit: UTM tags, Facebook click id, landing page and referring site.
+   Kept for the whole visit; a new ad click (URL with UTM tags / fbclid) replaces it. Stripe returns are ignored. */
+var crmAttr = (function(){
+  var KEYS=['utm_source','utm_medium','utm_campaign','utm_content','utm_term','fbclid'];
+  var p=new URLSearchParams(location.search), saved=null;
+  try{ saved=JSON.parse(sessionStorage.getItem('naya_attr')||'null'); }catch(e){}
+  var isAd=KEYS.some(function(k){ return p.get(k); });
+  if(saved && (!isAd || p.get('paid'))) return saved;
+  var a={ landing_url: location.href.slice(0,1000) };
+  KEYS.forEach(function(k){ var v=p.get(k); if(v) a[k]=v; });
+  var ref=document.referrer||'';
+  try{ if(ref && new URL(ref).host!==location.host && !/(^|\.)stripe\.com$/.test(new URL(ref).host)) a.referrer=ref.slice(0,1000); }catch(e){}
+  try{ sessionStorage.setItem('naya_attr', JSON.stringify(a)); }catch(e){}
+  return a;
+})();
+function crmSaveLead(){
+  if(!state.leadId) state.leadId=crmNewId();
+  var d={ id:state.leadId, lang:CRM_LANG, name:state.name, whatsapp:state.whatsapp, interest:state.interest, dob:state.dob, ethnicity:state.ethnicity, pkg:state.pkg, consent:true };
+  Object.keys(crmAttr).forEach(function(k){ d[k]=crmAttr[k]; });
+  saveStateForReturn();
+  crmPost('/api/leads', d);
+}
+function crmCheckout(){ if(state.leadId) crmPost('/api/leads/checkout', { id:state.leadId, pkg:state.pkg }); }
+/* Payment Links carry the lead id so Stripe orders can be matched back to the lead */
+function crmLink(link){
+  return (state.leadId && /^https:\/\/buy\.stripe\.com\//.test(link)) ? link+(link.indexOf('?')>-1?'&':'?')+'client_reference_id='+encodeURIComponent(state.leadId) : link;
+}
+/* Thank-you page: ask the server to verify the order with Stripe. Meta Purchase fires once per real, paid order. */
+function crmConfirmPayment(sessionId){
+  var key='naya_purchase_'+(sessionId||state.pkg);
+  function seen(){ try{ return localStorage.getItem(key)==='1'; }catch(e){ return false; } }
+  function mark(){ try{ localStorage.setItem(key,'1'); }catch(e){} }
+  function fallback(){ if(!seen()){ mark(); firePurchase(); } } /* can't verify (no session id / server down) — count once per browser */
+  if(!sessionId){ fallback(); return; }
+  fetch('/api/confirm-payment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:sessionId, leadId:state.leadId, pkg:state.pkg})})
+  .then(function(r){ if(r.status>=500) throw new Error('confirm '+r.status); return r.json(); })
+  .then(function(d){
+    if(d.email && !state.email){ state.email=d.email; fillThankYou(); }
+    if(d.paid && d.firstTime && !seen()){ mark(); firePurchase(d.value); }
+  })
+  .catch(fallback);
+}
 function metaPkgData(){
   var complete = state.pkg==='complete';
   return { content_name: complete ? 'Complete Soulmate Vision' : 'Basic Soulmate Sketch', content_category:'Soulmate Sketch', content_ids:[state.pkg], content_type:'product', value: complete ? 67 : 37, currency:'USD' };
 }
 function fireInitiateCheckout(source){
+  crmCheckout();
   var now = Date.now();
   if(metaICPkg===state.pkg && now-metaICAt < 10*60*1000) return; /* reaching checkout already counted for this package */
   metaICPkg = state.pkg; metaICAt = now; metaSyncUser();
   if(window.trackMetaEvent) window.trackMetaEvent('InitiateCheckout', metaPkgData());
 }
-function firePurchase(){
+function firePurchase(amount){
   if(metaPurchaseFired) return;
   metaPurchaseFired = true; metaSyncUser();
-  var d = metaPkgData(); d.num_items = 1;
+  var d = metaPkgData(); d.num_items = 1; if(typeof amount==='number' && amount>0) d.value = amount;
   if(window.trackMetaEvent) window.trackMetaEvent('Purchase', d);
 }
 
@@ -1003,7 +1065,7 @@ document.getElementById('quiz-finish').addEventListener('click', function(){
   var wa=fullPhone();
   if(document.getElementById('quiz-wa').value.replace(/\D/g,'').length < 6){ err('quiz-error','Veuillez saisir un numéro WhatsApp valide (avec l’indicatif pays) — c’est là que votre portrait sera livré.'); return; }
   if(!document.getElementById('quiz-consent').checked){ err('quiz-error','Veuillez cocher la case pour confirmer que vous avez 18 ans ou plus et que vous acceptez de recevoir votre portrait.'); return; }
-  state.whatsapp=wa; metaSyncUser();
+  state.whatsapp=wa; metaSyncUser(); crmSaveLead();
   if(window.trackMetaEvent) window.trackMetaEvent('Lead', { content_name:'Soulmate Sketch Quiz', content_category:'Soulmate Sketch' });
   show('offer');
 });
@@ -1100,7 +1162,7 @@ function mountStripeCheckout(){
   saveStateForReturn();
   var waitStripe=new Promise(function(res,rej){ var n=0; (function t(){ if(window.Stripe) return res(); if(++n>100) return rej(new Error('Stripe.js not loaded')); setTimeout(t,100); })(); });
   fetch('/.netlify/functions/create-checkout',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({lang:'fr',pkg:state.pkg,name:state.name,whatsapp:state.whatsapp,interest:state.interest,dob:state.dob,ethnicity:state.ethnicity})})
+    body:JSON.stringify({lang:'fr',leadId:state.leadId,pkg:state.pkg,name:state.name,whatsapp:state.whatsapp,interest:state.interest,dob:state.dob,ethnicity:state.ethnicity})})
   .then(function(r){ if(!r.ok) throw new Error('checkout '+r.status); return r.json(); })
   .then(function(d){ if(!d.clientSecret||!d.publishableKey) throw new Error('no session'); return waitStripe.then(function(){ return d; }); })
   .then(function(d){
@@ -1119,15 +1181,15 @@ function mountStripeCheckout(){
 function wireStripeButtons(){
   var link = STRIPE_LINKS[state.pkg] || '#';
   var btn=document.getElementById('stripe-pay-btn');
-  btn.href=link; btn.textContent = 'Payer maintenant';
-  ['upsell-stripe-btn','upsell-top-btn'].forEach(function(id){ var up=document.getElementById(id); if(up) up.href = STRIPE_LINKS.complete; });
+  btn.href=crmLink(link); btn.textContent = 'Payer maintenant';
+  ['upsell-stripe-btn','upsell-top-btn'].forEach(function(id){ var up=document.getElementById(id); if(up) up.href = crmLink(STRIPE_LINKS.complete); });
 }
 document.getElementById('co-back').addEventListener('click', function(){ show('offer'); });
 
 /* Pay Now clicks also count as InitiateCheckout — fireInitiateCheckout suppresses a duplicate when reaching checkout already fired for the same package (e.g. the main checkout button). The upsell button goes straight to Stripe, so it fires here. CAPI send uses keepalive, so the event still leaves the browser as Stripe loads. */
 document.getElementById('stripe-pay-btn').addEventListener('click', function(){ saveStateForReturn(); fireInitiateCheckout('pay-now'); });
 ['upsell-stripe-btn','upsell-top-btn'].forEach(function(id){ var upsellPayBtn=document.getElementById(id);
-  if(upsellPayBtn) upsellPayBtn.addEventListener('click', function(){ state.pkg='complete'; saveStateForReturn(); fireInitiateCheckout('pay-now-upsell'); }); });
+  if(upsellPayBtn) upsellPayBtn.addEventListener('click', function(){ state.pkg='complete'; upsellPayBtn.href=crmLink(STRIPE_LINKS.complete); saveStateForReturn(); fireInitiateCheckout('pay-now-upsell'); }); });
 
 /* Upsell */
 document.getElementById('upsell-keep-basic').addEventListener('click', function(){ state.pkg='basic'; fillThankYou(); show('thankyou'); });
@@ -1162,7 +1224,7 @@ document.getElementById('exit-stay').addEventListener('click', function(){ docum
 (function(){
   var params=new URLSearchParams(location.search);
   var paid=params.get('paid');
-  if(paid==='basic'||paid==='complete'){ try{ var saved=JSON.parse(sessionStorage.getItem('naya_state')||'null'); if(saved) Object.keys(state).forEach(function(k){ if(saved[k]) state[k]=saved[k]; }); }catch(e){} state.pkg=paid; metaPaidOrder=true; fillThankYou(); show('thankyou'); firePurchase(); return; }
+  if(paid==='basic'||paid==='complete'){ try{ var saved=JSON.parse(sessionStorage.getItem('naya_state')||'null'); if(saved) Object.keys(state).forEach(function(k){ if(saved[k]) state[k]=saved[k]; }); }catch(e){} state.pkg=paid; metaPaidOrder=true; fillThankYou(); show('thankyou'); crmConfirmPayment(params.get('session_id')); return; }
   var h=(location.hash||'').replace('#','');
   if(['quiz','offer','checkout','upsell','thankyou'].indexOf(h)>-1){ if(h==='checkout') fillCheckout(); if(h==='thankyou') fillThankYou(); show(h); if(h==='quiz') setStep(1); }
   /* ViewContent — landing page only (skipped on a paid return or a deep link into another view). Purchase above fires only for a real paid order (?paid=…), never for an in-page thank-you preview. */
