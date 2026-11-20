@@ -87,7 +87,7 @@ try{ pw = sessionStorage.getItem('naya_admin_pw') || ''; }catch(e){}
 function $(id){ return document.getElementById(id); }
 function esc(v){ return String(v==null?'':v).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 function when(t){ return t ? new Date(t).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'}) : ''; }
-function money(c,cur){ return c==null ? '' : (c/100).toLocaleString(undefined,{style:'currency',currency:(cur||'usd').toUpperCase()}); }
+function money(c,cur){ return c==null ? '' : (c/100).toLocaleString(undefined,{style:'currency',currency:(cur||'eur').toUpperCase()}); }
 
 function api(method, body){
   return fetch('/api/admin/leads',{ method:method, headers:{'Authorization':'Bearer '+pw,'Content-Type':'application/json'}, body: body?JSON.stringify(body):undefined })
@@ -112,7 +112,7 @@ function render(){
   var buyers=counts.paid+counts.delivered;
   $('stats').innerHTML=[
     [counts.all,'Total leads'],[today,'Leads today'],[buyers,'Buyers ('+(counts.all?Math.round(buyers/counts.all*100):0)+'%)'],
-    [counts.paid,'Paid — to deliver'],[counts.delivered,'Delivered'],[money(revenue,'usd'),'Revenue']
+    [counts.paid,'Paid — to deliver'],[counts.delivered,'Delivered'],[money(revenue,'eur'),'Revenue']
   ].map(function(s){ return '<div class="stat"><b>'+esc(s[0])+'</b><span>'+esc(s[1])+'</span></div>'; }).join('');
 
   $('tabs').innerHTML=['all','new','checkout','paid','delivered'].map(function(k){
