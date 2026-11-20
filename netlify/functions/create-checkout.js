@@ -5,14 +5,14 @@
 // Netlify → Site settings → Environment variables:
 //   STRIPE_SECRET_KEY        sk_live_...   (server-side only, never in the HTML)
 //   STRIPE_PUBLISHABLE_KEY   pk_live_...   (returned to the page so Stripe.js can mount)
-//   STRIPE_PRICE_BASIC       price_...     (optional — the $37 price; inline $37 used if unset)
-//   STRIPE_PRICE_COMPLETE    price_...     (optional — the $67 price; inline $67 used if unset)
+//   STRIPE_PRICE_BASIC       price_...     (optional — the €17 EUR price; inline €17 used if unset)
+//   STRIPE_PRICE_COMPLETE    price_...     (optional — the €37 EUR price; inline €37 used if unset)
 //
 // If the keys are not set, the page falls back to the Stripe Payment Links.
 
 const PACKAGES = {
-  basic:    { name: 'Basic Soulmate Sketch',    amount: 3700, priceEnv: 'STRIPE_PRICE_BASIC' },
-  complete: { name: 'Complete Soulmate Vision', amount: 6700, priceEnv: 'STRIPE_PRICE_COMPLETE' },
+  basic:    { name: 'Basic Soulmate Sketch',    amount: 1700, priceEnv: 'STRIPE_PRICE_BASIC' },
+  complete: { name: 'Complete Soulmate Vision', amount: 3700, priceEnv: 'STRIPE_PRICE_COMPLETE' },
 };
 
 exports.handler = async (event) => {
@@ -46,7 +46,7 @@ exports.handler = async (event) => {
   if (priceId) {
     form.append('line_items[0][price]', priceId);
   } else {
-    form.append('line_items[0][price_data][currency]', 'usd');
+    form.append('line_items[0][price_data][currency]', 'eur');
     form.append('line_items[0][price_data][unit_amount]', String(pkg.amount));
     form.append('line_items[0][price_data][product_data][name]', pkg.name);
   }

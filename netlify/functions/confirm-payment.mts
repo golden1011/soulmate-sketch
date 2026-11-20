@@ -10,7 +10,11 @@ import { leads, type Lead } from "../../db/schema.js";
 import { clean, isUuid, json, normLang, normPkg } from "../../db/util.js";
 
 const SESSION_RE = /^cs_(test|live)_[A-Za-z0-9]+$/;
-const pkgFromAmount = (cents: number | null) => (cents === 3700 ? "basic" : cents === 6700 ? "complete" : null);
+// Fallback when the session has no package metadata. EUR: €17 basic / €37 complete (older USD orders: $37 / $67).
+const pkgFromAmount = (cents: number | null, currency: string | null) => {
+  if (currency === "eur") return cents === 1700 ? "basic" : cents === 3700 ? "complete" : null;
+  return cents === 3700 ? "basic" : cents === 6700 ? "complete" : null;
+};
 
 export default async (req: Request) => {
   const secret = process.env.STRIPE_SECRET_KEY;
@@ -34,7 +38,7 @@ export default async (req: Request) => {
   const paid = s.payment_status === "paid" || s.payment_status === "no_payment_required";
   const meta: Record<string, string> = s.metadata || {};
   const amountCents: number | null = typeof s.amount_total === "number" ? s.amount_total : null;
-  const pkg = normPkg(meta.package) || pkgFromAmount(amountCents) || normPkg(body.pkg);
+  const pkg = normPkg(meta.package) || pkgFromAmount(amountCents, s.currency ? String(s.currency).toLowerCase() : null) || normPkg(body.pkg);
   const email = clean(s.customer_details?.email);
   const result = {
     paid,
