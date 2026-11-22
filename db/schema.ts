@@ -1,4 +1,13 @@
-import { pgTable, uuid, text, boolean, integer, timestamp, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, boolean, integer, timestamp, index, jsonb } from "drizzle-orm/pg-core";
+
+export type ManualPurchase = {
+  fbc: string;
+  amountCents: number;
+  currency: string;
+  eventTime: number;
+  attemptedAt: number;
+  state: "sending" | "failed" | "sent";
+};
 
 // One row per person who finishes the quiz. Status moves:
 // new → checkout → paid (confirmed with Stripe) → delivered (set by hand in /admin).
@@ -26,6 +35,8 @@ export const leads = pgTable(
     utmTerm: text("utm_term"),
     referrer: text(),
     fbclid: text(),
+    fbc: text(),
+    manualPurchase: jsonb("manual_purchase").$type<ManualPurchase>(),
     landingUrl: text("landing_url"),
     notes: text().notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

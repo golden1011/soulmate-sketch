@@ -15,6 +15,16 @@ export const clean = (v: unknown, max = 200): string | null => {
 export const normLang = (v: unknown): string => (v === "fr" || v === "de" ? v : "en");
 export const normPkg = (v: unknown): string | null => (v === "basic" || v === "complete" ? v : null);
 
+const CLICK_ID = /^[\w-]{1,500}$/;
+const FBC = /^fb\.\d+\.\d{13}\.([\w-]{1,500})$/;
+
+export function metaAttribution(clickId: unknown, cookie: unknown) {
+  const fbclid = typeof clickId === "string" && CLICK_ID.test(clickId) ? clickId : null;
+  const match = typeof cookie === "string" ? FBC.exec(cookie) : null;
+  const fbc = match && (!fbclid || match[1] === fbclid) ? match[0] : null;
+  return { fbclid: fbclid ?? (fbc ? match![1] : null), fbc };
+}
+
 export const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
