@@ -4,7 +4,7 @@
 // only the first time a given payment is recorded, so the page fires the Meta Purchase
 // event once per real order (not on refreshes or a hand-typed ?paid= link).
 import type { Config } from "@netlify/functions";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "../../db/index.js";
 import { leads, type Lead } from "../../db/schema.js";
 import { clean, isUuid, json, normLang, normPkg } from "../../db/util.js";
@@ -72,11 +72,12 @@ export default async (req: Request) => {
   if (lead && !lead.stripeSessionId) {
     const updated = await db
       .update(leads)
-      .set({ ...payment, status: lead.status === "delivered" ? "delivered" : "paid" })
-      .where(eq(leads.id, lead.id))
-      .returning({ id: leads.id })
+      .set({ ...payment, paidAt: sql`coalesce(${leads.paidAt}, ${now.toISOString()}::timestamptz)`,
+        status: sql`case when ${leads.status} = 'delivered' then 'delivered' else 'paid' end` })
+      .where(and(eq(leads.id, lead.id), isNull(leads.stripeSessionId)))
+      .returning({ manualPurchase: leads.manualPurchase })
       .catch(() => []); // unique clash = a parallel request already recorded it
-    return json({ ...result, firstTime: updated.length > 0 });
+    return json({ ...result, firstTime: updated.length > 0 && !updated[0].manualPurchase });
   }
 
   // No matching lead (quiz data lost, or this lead already paid once before): record the order as its own row.
@@ -99,6 +100,7 @@ export default async (req: Request) => {
       utmTerm: lead?.utmTerm ?? null,
       referrer: lead?.referrer ?? null,
       fbclid: lead?.fbclid ?? null,
+      fbc: lead?.fbc ?? null,
       landingUrl: lead?.landingUrl ?? null,
       notes: lead ? `Repeat order (original lead ${lead.id})` : "",
       ...payment,

@@ -122,7 +122,7 @@ function render(){
   var rows=leads.filter(function(l){
     if(filter!=='all' && l.status!==filter) return false;
     if(!q) return true;
-    return [l.name,l.whatsapp,l.customerEmail,l.notes,l.ethnicity,l.utmSource,l.utmCampaign,l.utmContent,l.utmTerm,l.referrer].join(' ').toLowerCase().indexOf(q)>-1;
+    return [l.name,l.whatsapp,l.customerEmail,l.notes,l.ethnicity,l.utmSource,l.utmCampaign,l.utmContent,l.utmTerm,l.referrer,l.fbclid].join(' ').toLowerCase().indexOf(q)>-1;
   });
   if(!rows.length){ $('list').innerHTML='<div class="empty">'+(leads.length?'No leads match this filter.':'No leads yet — they appear here as soon as someone finishes the quiz.')+'</div>'; return; }
 
@@ -130,6 +130,12 @@ function render(){
     var digits=(l.whatsapp||'').replace(/\D/g,'');
     var host=''; try{ host=l.referrer?new URL(l.referrer).host.replace(/^www\./,''):''; }catch(e){}
     var source=[l.utmSource,l.utmMedium].filter(Boolean).join(' / ') || (l.fbclid?'Facebook ad click':'') || (host?'Referral: '+host:'') || 'Direct / unknown';
+    var manualEligible=!l.paidAt && !l.stripeSessionId && (l.status==='new'||l.status==='checkout');
+    var purchase=l.manualPurchase, seconds=Math.floor(Date.now()/1000);
+    var canRetry=purchase && purchase.state!=='sent' && seconds-purchase.eventTime<86400
+      && (purchase.state==='failed'||seconds-purchase.attemptedAt>=30) && (l.status==='paid'||l.status==='delivered');
+    var purchaseLabel=purchase ? (purchase.state==='sent'?'Sent to Meta':seconds-purchase.eventTime>=86400?'Not confirmed · retry closed':purchase.state==='sending'&&!canRetry?'Sending…':'Not confirmed')
+      : l.paidAt && !l.stripeSessionId && !l.fbclid ? 'Not sent · no click ID' : '';
     var ad=[['Campaign',l.utmCampaign],['Ad set',l.utmTerm],['Ad',l.utmContent]].filter(function(x){ return x[1]; });
     var timeline=[['Lead',l.createdAt],['Checkout',l.checkoutAt],['Paid',l.paidAt],['Delivered',l.deliveredAt]].filter(function(t){ return t[1]; })
       .map(function(t){ return t[0]+': '+when(t[1]); }).join('<br>');
@@ -146,24 +152,35 @@ function render(){
       +'<dt>Funnel</dt><dd>'+esc(LANG[l.language]||l.language)+'</dd>'
       +'<dt>Consent 18+</dt><dd>'+(l.consent?'Yes':'—')+'</dd>'
       +'<dt>Source</dt><dd>'+esc(source)+'</dd>'
+      +'<dt>Facebook click ID</dt><dd>'+esc(l.fbclid||'—')+'</dd>'
+      +(purchaseLabel?'<dt>Manual purchase</dt><dd>'+purchaseLabel+'</dd>':'')
       +ad.map(function(x){ return '<dt>'+x[0]+'</dt><dd>'+esc(x[1])+'</dd>'; }).join('')
       +(l.stripeSessionId?'<dt>Stripe</dt><dd class="meta">'+esc(l.stripeSessionId.slice(0,24))+'…</dd>':'')
       +'</dl>'
       +'<div class="actions">'
+      +(manualEligible?'<label class="meta">Package for manual payment <select data-act="paid-package">'
+        +'<option value="">Select package</option>'+['basic','complete'].map(function(pkg){
+          return '<option value="'+pkg+'"'+(l.package===pkg?' selected':'')+'>'+esc(PKG[pkg]+' · '+manualPrice(l,pkg))+'</option>';
+        }).join('')+'</select></label>':'')
       +'<div class="row"><select data-act="status">'+Object.keys(STATUS).map(function(k){ return '<option value="'+k+'"'+(l.status===k?' selected':'')+'>'+STATUS[k]+'</option>'; }).join('')+'</select>'
       +(l.status!=='delivered'?'<button class="btn primary" data-act="deliver">✓ Mark delivered</button>':'')+'</div>'
+      +(canRetry?'<div class="row"><button class="btn" data-act="retry-purchase">Retry Meta purchase</button></div>':'')
       +'<textarea data-act="notes" placeholder="Notes (saved automatically)">'+esc(l.notes)+'</textarea>'
       +'<div class="row" style="justify-content:space-between"><span class="saved"></span><button class="btn danger" data-act="delete">Delete</button></div>'
       +'</div></div>';
   }).join('');
 }
 
+function manualPrice(lead, pkg){
+  return lead.package===pkg && lead.amountCents!=null && lead.currency ? money(lead.amountCents,lead.currency) : money(pkg==='basic'?1700:3700,'EUR');
+}
+
 function update(id, patch, el){
   return api('PATCH', Object.assign({id:id}, patch)).then(function(d){
     leads=leads.map(function(l){ return l.id===id ? d.lead : l; });
-    if(patch.status) render();
+    if(patch.status||patch.retryPurchase) render();
     else if(el){ var s=el.closest('.lead').querySelector('.saved'); s.textContent='Saved'; setTimeout(function(){ s.textContent=''; },1500); }
-  }).catch(function(e){ alert('Could not save: '+e.message); });
+  }).catch(function(e){ if(patch.status||patch.retryPurchase) render(); alert('Could not save: '+e.message); });
 }
 
 $('login-form').addEventListener('submit', function(e){
@@ -174,13 +191,26 @@ $('refresh').addEventListener('click', load);
 $('q').addEventListener('input', render);
 $('tabs').addEventListener('click', function(e){ var b=e.target.closest('button'); if(b){ filter=b.dataset.f; render(); } });
 $('list').addEventListener('change', function(e){
-  var id=e.target.closest('.lead').dataset.id;
-  if(e.target.dataset.act==='status') update(id,{status:e.target.value});
+  var card=e.target.closest('.lead'), id=card.dataset.id;
+  if(e.target.dataset.act==='status'){
+    var patch={status:e.target.value}, picker=card.querySelector('[data-act="paid-package"]');
+    if(patch.status==='paid' && picker){
+      var lead=leads.find(function(item){ return item.id===id; });
+      if(!picker.value){ e.target.value=lead.status; alert('Select the package that was paid for.'); return; }
+      patch.package=picker.value;
+      var message='Mark '+PKG[patch.package]+' paid for '+manualPrice(lead,patch.package)+'?';
+      message+=lead.fbclid?' This reports a purchase to Meta.':' No Facebook click ID is available, so no Meta purchase will be sent.';
+      if(!confirm(message)){ e.target.value=lead.status; return; }
+    }
+    e.target.disabled=true;
+    update(id,patch);
+  }
   if(e.target.dataset.act==='notes') update(id,{notes:e.target.value}, e.target);
 });
 $('list').addEventListener('click', function(e){
   var b=e.target.closest('button'); if(!b) return; var id=b.closest('.lead').dataset.id;
   if(b.dataset.act==='deliver') update(id,{status:'delivered'});
+  if(b.dataset.act==='retry-purchase'){ b.disabled=true; update(id,{retryPurchase:true}); }
   if(b.dataset.act==='delete' && confirm('Delete this lead permanently?')){
     api('DELETE',{id:id}).then(function(){ leads=leads.filter(function(l){ return l.id!==id; }); render(); }).catch(function(e){ alert(e.message); });
   }

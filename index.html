@@ -947,6 +947,11 @@ var crmAttr = (function(){
   if(saved && (!isAd || p.get('paid'))) return saved;
   var a={ landing_url: location.href.slice(0,1000) };
   KEYS.forEach(function(k){ var v=p.get(k); if(v) a[k]=v; });
+  var clickCookie=null;
+  try{ clickCookie=/^fb\.\d+\.\d{13}\.([\w-]{1,500})$/.exec(metaCookie('_fbc')); }catch(e){}
+  if(clickCookie && (a.fbclid===clickCookie[1] || !isAd)){
+    a.fbclid=clickCookie[1]; a.fbc=clickCookie[0];
+  }else if(a.fbclid){ a.fbc='fb.1.'+Date.now()+'.'+a.fbclid; }
   var ref=document.referrer||'';
   try{ if(ref && new URL(ref).host!==location.host && !/(^|\.)stripe\.com$/.test(new URL(ref).host)) a.referrer=ref.slice(0,1000); }catch(e){}
   try{ sessionStorage.setItem('naya_attr', JSON.stringify(a)); }catch(e){}
@@ -959,7 +964,7 @@ function crmSaveLead(){
   saveStateForReturn();
   crmPost('/api/leads', d);
 }
-function crmCheckout(){ if(state.leadId) crmPost('/api/leads/checkout', { id:state.leadId, pkg:state.pkg }); }
+function crmCheckout(){ if(state.leadId) crmPost('/api/leads/checkout', { id:state.leadId, pkg:state.pkg, fbclid:crmAttr.fbclid, fbc:crmAttr.fbc }); }
 /* Payment Links carry the lead id so Stripe orders can be matched back to the lead */
 function crmLink(link){
   return (state.leadId && /^https:\/\/buy\.stripe\.com\//.test(link)) ? link+(link.indexOf('?')>-1?'&':'?')+'client_reference_id='+encodeURIComponent(state.leadId) : link;

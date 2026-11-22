@@ -6,7 +6,7 @@ import type { Config } from "@netlify/functions";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../../db/index.js";
 import { leads } from "../../db/schema.js";
-import { clean, isUuid, json, normLang, normPkg } from "../../db/util.js";
+import { clean, isUuid, json, metaAttribution, normLang, normPkg } from "../../db/util.js";
 
 export default async (req: Request) => {
   let body: Record<string, unknown>;
@@ -18,6 +18,12 @@ export default async (req: Request) => {
   if (!isUuid(body.id)) return json({ error: "Invalid lead id" }, 400);
   const id = body.id;
   const pkg = normPkg(body.pkg);
+  const meta = metaAttribution(body.fbclid, body.fbc);
+  const fillMeta = {
+    fbclid: sql`coalesce(${leads.fbclid}, ${meta.fbclid})`,
+    fbc: sql`case when ${leads.fbclid} is null or ${leads.fbclid} = ${meta.fbclid}
+      then coalesce(${leads.fbc}, ${meta.fbc}) else ${leads.fbc} end`,
+  };
 
   if (new URL(req.url).pathname.endsWith("/checkout")) {
     // Only move forward: a paid or delivered lead never goes back to "checkout".
@@ -26,6 +32,7 @@ export default async (req: Request) => {
       .set({
         status: "checkout",
         ...(pkg ? { package: pkg } : {}),
+        ...fillMeta,
         checkoutAt: sql`coalesce(${leads.checkoutAt}, now())`,
         updatedAt: new Date(),
       })
@@ -50,7 +57,7 @@ export default async (req: Request) => {
     utmContent: clean(body.utm_content),
     utmTerm: clean(body.utm_term),
     referrer: clean(body.referrer, 1000),
-    fbclid: clean(body.fbclid, 500),
+    ...meta,
     landingUrl: clean(body.landing_url, 1000),
   };
 
@@ -58,7 +65,11 @@ export default async (req: Request) => {
   await db
     .insert(leads)
     .values({ id, ...quiz, ...attribution })
-    .onConflictDoUpdate({ target: leads.id, set: { ...quiz, updatedAt: new Date() } });
+    .onConflictDoUpdate({
+      target: leads.id,
+      set: { ...quiz, ...fillMeta, package: sql`case when ${leads.status} = 'new'
+        then coalesce(${pkg}, ${leads.package}) else ${leads.package} end`, updatedAt: new Date() },
+    });
   return json({ ok: true });
 };
 
