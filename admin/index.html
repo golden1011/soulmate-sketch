@@ -132,9 +132,10 @@ function render(){
     var source=[l.utmSource,l.utmMedium].filter(Boolean).join(' / ') || (l.fbclid?'Facebook ad click':'') || (host?'Referral: '+host:'') || 'Direct / unknown';
     var manualEligible=!l.paidAt && !l.stripeSessionId && (l.status==='new'||l.status==='checkout');
     var purchase=l.manualPurchase, seconds=Math.floor(Date.now()/1000);
-    var canRetry=purchase && purchase.state!=='sent' && seconds-purchase.eventTime<86400
+    var retryUntil=purchase && (purchase.retryUntil || purchase.eventTime+86400);
+    var canRetry=purchase && purchase.state!=='sent' && seconds<retryUntil
       && (purchase.state==='failed'||seconds-purchase.attemptedAt>=30) && (l.status==='paid'||l.status==='delivered');
-    var purchaseLabel=purchase ? (purchase.state==='sent'?'Sent to Meta':seconds-purchase.eventTime>=86400?'Not confirmed · retry closed':purchase.state==='sending'&&!canRetry?'Sending…':'Not confirmed')
+    var purchaseLabel=purchase ? (purchase.state==='sent'?'Sent to Meta':seconds>=retryUntil?'Not confirmed · retry closed':purchase.state==='sending'&&!canRetry?'Sending…':'Not confirmed')
       : l.paidAt && !l.stripeSessionId && !l.fbclid ? 'Not sent · no click ID' : '';
     var ad=[['Campaign',l.utmCampaign],['Ad set',l.utmTerm],['Ad',l.utmContent]].filter(function(x){ return x[1]; });
     var timeline=[['Lead',l.createdAt],['Checkout',l.checkoutAt],['Paid',l.paidAt],['Delivered',l.deliveredAt]].filter(function(t){ return t[1]; })
@@ -164,6 +165,7 @@ function render(){
         }).join('')+'</select></label>':'')
       +'<div class="row"><select data-act="status">'+Object.keys(STATUS).map(function(k){ return '<option value="'+k+'"'+(l.status===k?' selected':'')+'>'+STATUS[k]+'</option>'; }).join('')+'</select>'
       +(l.status!=='delivered'?'<button class="btn primary" data-act="deliver">✓ Mark delivered</button>':'')+'</div>'
+      +(l.canBackfillPayPal?'<div class="row"><button class="btn" data-act="backfill-paypal">Report €30 PayPal purchase to Meta</button></div>':'')
       +(canRetry?'<div class="row"><button class="btn" data-act="retry-purchase">Retry Meta purchase</button></div>':'')
       +'<textarea data-act="notes" placeholder="Notes (saved automatically)">'+esc(l.notes)+'</textarea>'
       +'<div class="row" style="justify-content:space-between"><span class="saved"></span><button class="btn danger" data-act="delete">Delete</button></div>'
@@ -176,11 +178,12 @@ function manualPrice(lead, pkg){
 }
 
 function update(id, patch, el){
+  var refresh=patch.status||patch.retryPurchase||patch.backfillPayPal;
   return api('PATCH', Object.assign({id:id}, patch)).then(function(d){
     leads=leads.map(function(l){ return l.id===id ? d.lead : l; });
-    if(patch.status||patch.retryPurchase) render();
+    if(refresh) render();
     else if(el){ var s=el.closest('.lead').querySelector('.saved'); s.textContent='Saved'; setTimeout(function(){ s.textContent=''; },1500); }
-  }).catch(function(e){ if(patch.status||patch.retryPurchase) render(); alert('Could not save: '+e.message); });
+  }).catch(function(e){ if(refresh) render(); alert('Could not save: '+e.message); });
 }
 
 $('login-form').addEventListener('submit', function(e){
@@ -210,6 +213,9 @@ $('list').addEventListener('change', function(e){
 $('list').addEventListener('click', function(e){
   var b=e.target.closest('button'); if(!b) return; var id=b.closest('.lead').dataset.id;
   if(b.dataset.act==='deliver') update(id,{status:'delivered'});
+  if(b.dataset.act==='backfill-paypal' && confirm('Report the €30 PayPal payment from November 22, 2026 at 3:00 p.m. Toronto time to Meta? This does not charge the customer or change delivery status.')){
+    b.disabled=true; update(id,{backfillPayPal:true});
+  }
   if(b.dataset.act==='retry-purchase'){ b.disabled=true; update(id,{retryPurchase:true}); }
   if(b.dataset.act==='delete' && confirm('Delete this lead permanently?')){
     api('DELETE',{id:id}).then(function(){ leads=leads.filter(function(l){ return l.id!==id; }); render(); }).catch(function(e){ alert(e.message); });

@@ -3,9 +3,9 @@
 //   GET    /api/admin/leads                       — list all leads, newest first
 //   PATCH  /api/admin/leads { id, status?, notes? } — update status / notes
 //   DELETE /api/admin/leads { id }                 — remove a test or junk lead
-import type { Config } from "@netlify/functions";
+import type { Config, Context } from "@netlify/functions";
 import { createHash, timingSafeEqual } from "node:crypto";
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "../../db/index.js";
 import { leads, type Lead, type ManualPurchase } from "../../db/schema.js";
 import { STATUSES, isUuid, json, metaAttribution, normPkg, type Status } from "../../db/util.js";
@@ -13,6 +13,26 @@ import { sendManualPurchase } from "../lib/manual-purchase.mjs";
 
 const digest = (v: string) => createHash("sha256").update(v).digest();
 const RETRY_WINDOW_SECONDS = 24 * 60 * 60;
+const PAYPAL_LEAD_FINGERPRINT = "f0b5b5a0a326e7df20271bfc7663b0f23bad59ffcb91cc4d79ee068243dea173";
+const PAYPAL_PAID_AT = new Date("2026-11-22T15:00:00-05:00");
+const PAYPAL_EVENT_TIME = PAYPAL_PAID_AT.getTime() / 1000;
+const PAYPAL_EVENT_DEADLINE = PAYPAL_EVENT_TIME + 7 * 24 * 60 * 60;
+const PAYPAL_AMOUNT_CENTS = 3000;
+
+function purchaseClickId(lead: Lead) {
+  const attribution = metaAttribution(lead.fbclid, lead.fbc);
+  return attribution.fbc ?? (attribution.fbclid ? `fb.1.${lead.createdAt.getTime()}.${attribution.fbclid}` : null);
+}
+
+function isPayPalLead(lead: Lead) {
+  return digest(lead.id).toString("hex") === PAYPAL_LEAD_FINGERPRINT;
+}
+
+function canBackfillPayPal(lead: Lead, seconds: number) {
+  return seconds >= PAYPAL_EVENT_TIME && seconds < PAYPAL_EVENT_DEADLINE &&
+    lead.status === "delivered" && !!lead.paidAt && !!lead.deliveredAt && !lead.stripeSessionId &&
+    !lead.manualPurchase && isPayPalLead(lead) && !!purchaseClickId(lead);
+}
 
 async function reportPurchase(row: Lead, purchase: ManualPurchase) {
   const sent = await sendManualPurchase(row.id, purchase);
@@ -29,13 +49,18 @@ function authorized(req: Request): boolean {
   return given.length > 0 && timingSafeEqual(digest(given), digest(password));
 }
 
-export default async (req: Request) => {
+export default async (req: Request, context: Context) => {
   if (!process.env.ADMIN_PASSWORD) return json({ error: "ADMIN_PASSWORD is not set in Netlify" }, 503);
   if (!authorized(req)) return json({ error: "Wrong password" }, 401);
 
+  const isPublishedProduction = context.deploy.context === "production" && context.deploy.published;
+  const now = new Date();
+  const seconds = Math.floor(now.getTime() / 1000);
+  const annotateLead = (lead: Lead) => ({ ...lead, canBackfillPayPal: isPublishedProduction && canBackfillPayPal(lead, seconds) });
+
   if (req.method === "GET") {
     const rows = await db.select().from(leads).orderBy(desc(leads.createdAt)).limit(10000);
-    return json({ leads: rows });
+    return json({ leads: rows.map(annotateLead) });
   }
 
   let body: Record<string, unknown>;
@@ -52,18 +77,38 @@ export default async (req: Request) => {
     return json({ ok: true });
   }
 
-  if (body.status === "paid" || body.retryPurchase === true) {
+  if (body.status === "paid" || body.retryPurchase === true || body.backfillPayPal === true) {
     const [current] = await db.select().from(leads).where(eq(leads.id, id));
     if (!current) return json({ error: "Lead not found" }, 404);
-    const now = new Date();
-    const seconds = Math.floor(now.getTime() / 1000);
+
+    if (body.backfillPayPal === true) {
+      if (!isPublishedProduction || !canBackfillPayPal(current, seconds)) {
+        return json({ error: "This lead is not eligible for the one-time PayPal purchase." }, 409);
+      }
+      const fbc = purchaseClickId(current);
+      if (!fbc) return json({ error: "No Facebook click ID is available." }, 422);
+      const purchase: ManualPurchase = {
+        fbc, amountCents: PAYPAL_AMOUNT_CENTS, currency: "EUR", eventTime: PAYPAL_EVENT_TIME,
+        attemptedAt: seconds, retryUntil: Math.min(seconds + RETRY_WINDOW_SECONDS, PAYPAL_EVENT_DEADLINE), state: "sending",
+      };
+      const [claimed] = await db.update(leads).set({
+        amountCents: purchase.amountCents, currency: purchase.currency, paidAt: PAYPAL_PAID_AT,
+        updatedAt: now, manualPurchase: purchase,
+      }).where(and(eq(leads.id, id), eq(leads.status, "delivered"), isNotNull(leads.paidAt),
+        isNotNull(leads.deliveredAt), isNull(leads.stripeSessionId), isNull(leads.manualPurchase))).returning();
+      if (!claimed) return json({ error: "The lead changed. Refresh before reporting the PayPal purchase." }, 409);
+      return reportPurchase(claimed, purchase);
+    }
 
     if (body.retryPurchase === true) {
       const previous = current.manualPurchase;
       if (!previous || previous.state === "sent" || !["paid", "delivered"].includes(current.status)) {
         return json({ error: "There is no pending Meta purchase for this lead." }, 409);
       }
-      if (seconds - previous.eventTime >= RETRY_WINDOW_SECONDS) {
+      if (isPayPalLead(current) && previous.eventTime === PAYPAL_EVENT_TIME && !isPublishedProduction) {
+        return json({ error: "Retry this PayPal purchase from the live admin." }, 409);
+      }
+      if (seconds >= (previous.retryUntil ?? previous.eventTime + RETRY_WINDOW_SECONDS)) {
         return json({ error: "The Meta retry window for this purchase has closed." }, 409);
       }
       if (previous.state === "sending" && seconds - previous.attemptedAt < 30) {
@@ -115,7 +160,7 @@ export default async (req: Request) => {
   }
   const [row] = await db.update(leads).set(set).where(eq(leads.id, id)).returning();
   if (!row) return json({ error: "Lead not found" }, 404);
-  return json({ lead: row });
+  return json({ lead: annotateLead(row) });
 };
 
 export const config: Config = {

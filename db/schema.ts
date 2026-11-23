@@ -6,6 +6,7 @@ export type ManualPurchase = {
   currency: string;
   eventTime: number;
   attemptedAt: number;
+  retryUntil?: number;
   state: "sending" | "failed" | "sent";
 };
 
